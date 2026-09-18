@@ -2221,6 +2221,7 @@ namespace CamLinkPro.UI
             bgRt.anchorMin = Vector2.zero; bgRt.anchorMax = Vector2.one; bgRt.offsetMin = Vector2.zero; bgRt.offsetMax = Vector2.zero;
             bgImg = bgGo.GetComponent<Image>();
             bgImg.color = ButtonBg;
+            MakeRounded(bgGo, RoundedSpriteTextureSize / 2); // pill: radius = half the box height
 
             var checkGo = new GameObject("Checkmark", typeof(RectTransform), typeof(Image));
             checkGo.transform.SetParent(bgGo.transform, false);
@@ -2229,6 +2230,7 @@ namespace CamLinkPro.UI
             checkRt.offsetMin = Vector2.zero; checkRt.offsetMax = Vector2.zero;
             checkImg = checkGo.GetComponent<Image>();
             checkImg.color = ButtonActiveBg;
+            MakeRounded(checkGo, RoundedSpriteTextureSize / 2); // knob: full circle
 
             return go;
         }
@@ -2283,6 +2285,7 @@ namespace CamLinkPro.UI
             bgRt.anchorMin = new Vector2(0, 0.25f); bgRt.anchorMax = new Vector2(1, 0.75f);
             bgRt.offsetMin = Vector2.zero; bgRt.offsetMax = Vector2.zero;
             bgGo.GetComponent<Image>().color = ButtonBg;
+            MakeRounded(bgGo, RoundedSpriteTextureSize / 2); // pill track
 
             var fillAreaGo = new GameObject("Fill Area", typeof(RectTransform));
             fillAreaGo.transform.SetParent(go.transform, false);
@@ -2295,6 +2298,7 @@ namespace CamLinkPro.UI
             var fillRt = fillGo.GetComponent<RectTransform>();
             fillRt.anchorMin = Vector2.zero; fillRt.anchorMax = new Vector2(0, 1); fillRt.offsetMin = Vector2.zero; fillRt.offsetMax = Vector2.zero;
             fillGo.GetComponent<Image>().color = ButtonActiveBg;
+            MakeRounded(fillGo, RoundedSpriteTextureSize / 2); // pill fill
 
             var handleAreaGo = new GameObject("Handle Slide Area", typeof(RectTransform));
             handleAreaGo.transform.SetParent(go.transform, false);
@@ -2307,6 +2311,7 @@ namespace CamLinkPro.UI
             handleRt.sizeDelta = new Vector2(24, 0);
             var handleImg = handleGo.GetComponent<Image>();
             handleImg.color = Color.white;
+            MakeRounded(handleGo, RoundedSpriteTextureSize / 2); // circular knob
 
             var slider = go.GetComponent<Slider>();
             slider.fillRect = fillRt;
@@ -2341,6 +2346,7 @@ namespace CamLinkPro.UI
             bgRt.anchorMin = new Vector2(0.25f, 0f); bgRt.anchorMax = new Vector2(0.75f, 1f);
             bgRt.offsetMin = Vector2.zero; bgRt.offsetMax = Vector2.zero;
             bgGo.GetComponent<Image>().color = ButtonBg;
+            MakeRounded(bgGo, RoundedSpriteTextureSize / 2); // pill track
 
             var fillAreaGo = new GameObject("Fill Area", typeof(RectTransform));
             fillAreaGo.transform.SetParent(go.transform, false);
@@ -2353,6 +2359,7 @@ namespace CamLinkPro.UI
             var fillRt = fillGo.GetComponent<RectTransform>();
             fillRt.anchorMin = Vector2.zero; fillRt.anchorMax = new Vector2(1, 0); fillRt.offsetMin = Vector2.zero; fillRt.offsetMax = Vector2.zero;
             fillGo.GetComponent<Image>().color = ButtonActiveBg;
+            MakeRounded(fillGo, RoundedSpriteTextureSize / 2); // pill fill
 
             var handleAreaGo = new GameObject("Handle Slide Area", typeof(RectTransform));
             handleAreaGo.transform.SetParent(go.transform, false);
@@ -2365,6 +2372,7 @@ namespace CamLinkPro.UI
             handleRt.sizeDelta = new Vector2(0, 32);
             var handleImg = handleGo.GetComponent<Image>();
             handleImg.color = Color.white;
+            MakeRounded(handleGo, RoundedSpriteTextureSize / 2); // circular knob
 
             var slider = go.GetComponent<Slider>();
             slider.fillRect = fillRt;
@@ -2389,7 +2397,8 @@ namespace CamLinkPro.UI
             le.minWidth = narrow ? 90 : 420;
             le.minHeight = 50;
             var bgImg = go.GetComponent<Image>();
-            bgImg.color = new Color(1, 1, 1, 0.9f);
+            bgImg.color = ButtonBg;
+            MakeRounded(go, ButtonCornerRadiusPixels);
 
             var textGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
             textGo.transform.SetParent(go.transform, false);
@@ -2399,7 +2408,7 @@ namespace CamLinkPro.UI
             var text = textGo.GetComponent<Text>();
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             text.fontSize = narrow ? 18 : 20;
-            text.color = Color.black;
+            text.color = Color.white;
             text.alignment = narrow ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft;
             text.supportRichText = false;
 
@@ -2411,7 +2420,7 @@ namespace CamLinkPro.UI
             var phText = placeholderGo.GetComponent<Text>();
             phText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             phText.fontSize = narrow ? 18 : 20;
-            phText.color = new Color(0, 0, 0, 0.4f);
+            phText.color = new Color(1f, 1f, 1f, 0.4f);
             phText.fontStyle = FontStyle.Italic;
             phText.text = placeholder;
             phText.alignment = narrow ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft;
@@ -2420,7 +2429,7 @@ namespace CamLinkPro.UI
             field.textComponent = text;
             field.placeholder = phText;
             field.targetGraphic = bgImg;
-            field.colors = MakeColors(new Color(1, 1, 1, 0.9f), new Color(0.85f, 0.93f, 1f, 1f));
+            field.colors = MakeColors(ButtonBg, ButtonPressed);
             if (narrow) field.contentType = InputField.ContentType.DecimalNumber;
 
             return field;
