@@ -101,6 +101,7 @@ namespace CamLinkPro.UI
         Text landingStatusText;
         Image landingConnectionChip;
         Button letsRecordButton;
+        Image creditHeartImage;
 
         Text recordStatusText;
         Text zoomValueText;
@@ -277,6 +278,19 @@ namespace CamLinkPro.UI
                 savedToastHideAtUnscaled = -1f;
             }
             RefreshQrScanTimeout();
+            AnimateCreditHeart();
+        }
+
+        /// <summary>Continuous pump (scale pulse) + slow spin on the "Made
+        /// with (heart) by Teja" credit line's heart glyph -- purely
+        /// decorative, only runs while Landing is actually visible.</summary>
+        void AnimateCreditHeart()
+        {
+            if (creditHeartImage == null || !landingPanel.activeSelf) return;
+            float t = Time.unscaledTime;
+            float pump = 1f + 0.22f * Mathf.Max(0f, Mathf.Sin(t * 3.2f));
+            creditHeartImage.rectTransform.localScale = new Vector3(pump, pump, 1f);
+            creditHeartImage.rectTransform.localRotation = Quaternion.Euler(0f, 0f, t * 40f);
         }
 
         void RefreshQrScanTimeout()
@@ -552,9 +566,13 @@ namespace CamLinkPro.UI
             fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
 
             CreateLabel(landingPanel.transform, "Cam Link Pro", 40);
-            var banner = CreateLabel(landingPanel.transform, "Made with Love - Teja", 16);
-            banner.fontStyle = FontStyle.Italic;
-            banner.color = new Color(1f, 1f, 1f, 0.7f);
+
+            var creditRow = CreateRow(landingPanel.transform, "CreditRow");
+            var creditLeft = CreateLabel(creditRow.transform, "Made with", 26);
+            creditLeft.color = new Color(1f, 1f, 1f, 0.9f);
+            creditHeartImage = CreateHeartImage(creditRow.transform, 128, 46f, new Color(0.95f, 0.22f, 0.29f, 1f));
+            var creditRight = CreateLabel(creditRow.transform, "by Teja", 26);
+            creditRight.color = new Color(1f, 1f, 1f, 0.9f);
 
             // -- connected state: status + re-pair --
             landingConnectedGroup = new GameObject("ConnectedGroup", typeof(RectTransform));
@@ -1893,6 +1911,67 @@ namespace CamLinkPro.UI
             le.minWidth = 40;
             le.minHeight = fontSize + 10;
             return t;
+        }
+
+        /// <summary>A small heart-shaped icon for the credit line -- drawn as
+        /// a procedural texture rather than a Unicode glyph (♥/❤) because
+        /// Unity's built-in LegacyRuntime.ttf has no symbol/dingbat glyph
+        /// coverage at all: both U+2665 and U+2764 silently rendered as
+        /// nothing on-device, not a fallback box, just an empty gap. A
+        /// generated sprite can't hit that failure mode.</summary>
+        static Image CreateHeartImage(Transform parent, int pixelSize, float displaySize, Color color)
+        {
+            var tex = new Texture2D(pixelSize, pixelSize, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+            var pixels = new Color32[pixelSize * pixelSize];
+            byte r = (byte)(color.r * 255), g = (byte)(color.g * 255), b = (byte)(color.b * 255);
+            for (int py = 0; py < pixelSize; py++)
+            {
+                // Texture row 0 is the bottom in Unity -- map so the heart's
+                // point ends up at the bottom and its two lobes at the top.
+                float ny = (py / (float)(pixelSize - 1)) * 2.5f - 1.1f;
+                for (int px = 0; px < pixelSize; px++)
+                {
+                    float nx = (px / (float)(pixelSize - 1)) * 2.6f - 1.3f;
+                    // Classic implicit heart curve: (x^2 + y^2 - 1)^3 - x^2*y^3 <= 0
+                    float val = Mathf.Pow(nx * nx + ny * ny - 1f, 3f) - nx * nx * ny * ny * ny;
+                    // Soft edge (a couple of texels wide) instead of a hard
+                    // cutoff, so it doesn't look jagged -- tight enough at
+                    // this resolution to keep the top cleft between the two
+                    // lobes crisp rather than blurring it into a blob.
+                    float alpha = Mathf.Clamp01(0.5f - val * 16f);
+                    pixels[py * pixelSize + px] = new Color32(r, g, b, (byte)(alpha * 255));
+                }
+            }
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            var sprite = Sprite.Create(tex, new Rect(0, 0, pixelSize, pixelSize), new Vector2(0.5f, 0.5f));
+
+            var go = new GameObject("HeartIcon", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            // An Image always stretches its sprite to fill its RectTransform's
+            // actual width/height -- unlike Text, which just overflows past its
+            // rect -- so this row's HorizontalLayoutGroup not controlling child
+            // sizes (childControlWidth/Height are false) meant the heart was
+            // rendering at a fresh RectTransform's default 100x100, not the
+            // intended size. LayoutElement.min* alone doesn't override that;
+            // setting sizeDelta directly does.
+            go.GetComponent<RectTransform>().sizeDelta = new Vector2(displaySize, displaySize);
+            var le = go.AddComponent<LayoutElement>();
+            le.minWidth = le.minHeight = displaySize;
+            // The row's HorizontalLayoutGroup has childControlWidth/Height on,
+            // so it assigns each child its *preferred* size, not just clamps
+            // to the min -- and Image's own preferred size (with
+            // preserveAspect) is the sprite's native pixel size (128), not
+            // this. minWidth/minHeight alone is a floor, not the assigned
+            // size; preferred is what actually gets used here.
+            le.preferredWidth = le.preferredHeight = displaySize;
+            var img = go.GetComponent<Image>();
+            img.sprite = sprite;
+            img.color = Color.white; // colour already baked into the texture
+            img.preserveAspect = true;
+            return img;
         }
 
         /// <summary>A small circular status dot (connection health chip).</summary>
