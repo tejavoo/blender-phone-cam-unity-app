@@ -5,7 +5,11 @@
         "Unity.XR.ARFoundation",
         "Unity.InputSystem",
         "Unity.XR.Management",
-        "Unity.XR.ARSubsystems"
+        "Unity.XR.ARSubsystems",
+        "Nobi.UiRoundedCorners",
+        "Coffee.UIEffect",
+        "Coffee.SoftMaskForUGUI",
+        "Gilzoide.FlexUi"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
