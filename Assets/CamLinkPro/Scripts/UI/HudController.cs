@@ -3,6 +3,7 @@ using CamLinkPro.App;
 using CamLinkPro.Networking;
 using CamLinkPro.Pairing;
 using CamLinkPro.Pipeline;
+using Coffee.UIEffects;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -50,16 +51,25 @@ namespace CamLinkPro.UI
         [SerializeField] GameObject uiToolkitLandingRoot;
         [SerializeField] LandingScreenUITK uiToolkitLandingScreen;
 
-        static readonly Color PanelBg = new Color(0f, 0f, 0f, 0.45f);
-        static readonly Color ButtonBg = new Color(1f, 1f, 1f, 0.15f);
-        static readonly Color ButtonPressed = new Color(0.2f, 0.7f, 1f, 0.85f);
-        static readonly Color ButtonDisabled = new Color(1f, 1f, 1f, 0.06f);
-        static readonly Color ButtonActiveBg = new Color(0.2f, 0.7f, 1f, 0.55f);
-        static readonly Color DangerBg = new Color(0.8f, 0.25f, 0.2f, 0.55f);
-        static readonly Color DangerPressed = new Color(1f, 0.35f, 0.25f, 0.9f);
-        static readonly Color ChipGreen = new Color(0.25f, 0.85f, 0.35f, 1f);
-        static readonly Color ChipYellow = new Color(0.95f, 0.8f, 0.2f, 1f);
-        static readonly Color ChipRed = new Color(0.9f, 0.3f, 0.25f, 1f);
+        // Dark-navy palette matching the reviewed mockup
+        // (claude.ai/artifact/2sDLBzMfR4Hdf16u5V9tmW) rather than the
+        // original white-alpha-on-black scheme -- flat opaque surfaces for
+        // buttons/cards (so they read the same whether there's an AR feed
+        // behind them or not), translucent navy (not translucent black) for
+        // the full-screen panels that intentionally let that feed show
+        // through.
+        static readonly Color PanelBg = new Color(0.043f, 0.051f, 0.063f, 0.55f);
+        static readonly Color CardBg = new Color(0.078f, 0.090f, 0.110f, 0.97f);
+        static readonly Color ButtonBg = new Color(0.114f, 0.129f, 0.161f, 0.97f);
+        static readonly Color ButtonPressed = new Color(0.29f, 0.565f, 1f, 1f);
+        static readonly Color ButtonDisabled = new Color(0.114f, 0.129f, 0.161f, 0.5f);
+        static readonly Color ButtonActiveBg = new Color(0.29f, 0.565f, 1f, 0.9f);
+        static readonly Color DangerBg = new Color(0.478f, 0.161f, 0.176f, 0.95f);
+        static readonly Color DangerPressed = new Color(0.898f, 0.282f, 0.302f, 1f);
+        static readonly Color ChipGreen = new Color(0.239f, 0.839f, 0.549f, 1f);
+        static readonly Color ChipYellow = new Color(0.910f, 0.702f, 0.224f, 1f);
+        static readonly Color ChipRed = new Color(0.898f, 0.282f, 0.302f, 1f);
+
 
         // -- screens --
         GameObject landingPanel;
@@ -1879,8 +1889,92 @@ namespace CamLinkPro.UI
                 rt.offsetMax = Vector2.zero;
             }
             var img = go.GetComponent<Image>();
-            img.color = PanelBg;
+            // Full-screen panels intentionally stay a translucent overlay --
+            // the Recording HUD's AR feed shows through them. Smaller
+            // decorative boxes (dialogs, cards, sub-panels) are opaque
+            // "surface" cards with rounded corners instead, matching the
+            // mockup rather than a flat translucent rectangle.
+            img.color = stretch ? PanelBg : CardBg;
+            if (!stretch) MakeRounded(go, CardCornerRadiusPixels);
             return go;
+        }
+
+        static Sprite roundedRectSpriteCache;
+        static Sprite circleSpriteCache;
+        const int RoundedSpriteTextureSize = 64;
+        const int CardCornerRadiusPixels = 20;
+        const int ButtonCornerRadiusPixels = 16;
+
+        /// <summary>Rounded corners via a plain 9-sliced white-alpha sprite on
+        /// the standard UI/Default shader, not a custom shader -- a vendored
+        /// SDF rounded-corner shader (kirevdokimov/Unity-UI-Rounded-Corners)
+        /// was tried first and turned out unreliable on-device: correct in
+        /// the Editor, but rendered with square corners after being added to
+        /// Graphics Settings' Always Included Shaders (to survive stripping),
+        /// then rendered fully invisible after that fix. Not worth more
+        /// device-build iterations chasing a mobile GPU/shader-compilation
+        /// quirk in third-party shader code when a plain sprite -- using the
+        /// exact same rendering path every other Image in the app already
+        /// uses -- achieves the identical visual result with zero risk.</summary>
+        static void MakeRounded(GameObject go, int radiusPixels)
+        {
+            var img = go.GetComponent<Image>();
+            if (img == null) return;
+            img.sprite = radiusPixels * 2 >= RoundedSpriteTextureSize
+                ? GetCircleSprite()
+                : GetRoundedRectSprite();
+            img.type = Image.Type.Sliced;
+        }
+
+        static Sprite GetRoundedRectSprite() => roundedRectSpriteCache ??= CreateRoundedRectSprite(ButtonCornerRadiusPixels);
+        static Sprite GetCircleSprite() => circleSpriteCache ??= CreateRoundedRectSprite(RoundedSpriteTextureSize / 2);
+
+        /// <summary>A white square with alpha 1 inside a rounded-rect shape
+        /// (radiusPixels corner radius) and a soft ~1px anti-aliased edge,
+        /// set up for 9-slice scaling so the corner radius stays a fixed
+        /// pixel size regardless of the final Image's width/height --
+        /// radiusPixels == half the texture size renders as a full circle.</summary>
+        static Sprite CreateRoundedRectSprite(int radiusPixels)
+        {
+            int size = RoundedSpriteTextureSize;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                bool yInCornerBand = y < radiusPixels || y > size - 1 - radiusPixels;
+                for (int x = 0; x < size; x++)
+                {
+                    bool xInCornerBand = x < radiusPixels || x > size - 1 - radiusPixels;
+                    float alpha = 1f;
+                    if (xInCornerBand && yInCornerBand)
+                    {
+                        float cx = x < radiusPixels ? radiusPixels : size - 1 - radiusPixels;
+                        float cy = y < radiusPixels ? radiusPixels : size - 1 - radiusPixels;
+                        float dist = Mathf.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+                        alpha = Mathf.Clamp01(radiusPixels - dist + 0.5f);
+                    }
+                    pixels[y * size + x] = new Color32(255, 255, 255, (byte)(alpha * 255));
+                }
+            }
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            float b = radiusPixels;
+            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0,
+                SpriteMeshType.FullRect, new Vector4(b, b, b, b));
+        }
+
+        /// <summary>Subtle drop shadow via Coffee UIEffect, for the flat
+        /// "surface" buttons/cards to read as raised rather than pasted flat
+        /// on the background.</summary>
+        static void AddSoftShadow(GameObject go)
+        {
+            var effect = go.AddComponent<UIEffect>();
+            effect.shadowMode = ShadowMode.Shadow;
+            effect.shadowDistance = new Vector2(0f, -3f);
+            effect.shadowColorAlpha = 0.35f;
+            effect.shadowBlurIntensity = 0.5f;
         }
 
         static GameObject CreateRow(Transform parent, string name)
@@ -1987,6 +2081,7 @@ namespace CamLinkPro.UI
             le.minHeight = 22;
             var img = go.GetComponent<Image>();
             img.color = ChipRed;
+            MakeRounded(go, RoundedSpriteTextureSize / 2); // full circle
             return img;
         }
 
@@ -2023,6 +2118,8 @@ namespace CamLinkPro.UI
             btn.targetGraphic = img;
             btn.colors = MakeColors(danger ? DangerBg : ButtonBg, danger ? DangerPressed : ButtonPressed);
             btn.onClick.AddListener(onClick);
+            MakeRounded(go, ButtonCornerRadiusPixels);
+            AddSoftShadow(go);
 
             var labelText = CreateLabel(go.transform, label, 20);
             var labelRt = labelText.GetComponent<RectTransform>();

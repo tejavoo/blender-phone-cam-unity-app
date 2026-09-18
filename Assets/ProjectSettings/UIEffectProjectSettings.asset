@@ -7,7 +7,12 @@ ShaderVariantCollection:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: ShaderVariants
-  m_Shaders: {}
+  m_Shaders:
+  - first: {fileID: 4800000, guid: 96246b1ead49a4c5a996fd477bc5a117, type: 3}
+    second:
+      variants:
+      - keywords: COLOR_FILTER
+        passType: 0
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -30,6 +35,7 @@ MonoBehaviour:
     - key: Hidden/UI/Default (SoftMaskable)
       value: Hidden/UI/Default (UIEffect)
     m_Asset: {fileID: -5138837495139968772}
-    m_RegisteredShaders: []
+    m_RegisteredShaders:
+    - {fileID: 4800000, guid: 96246b1ead49a4c5a996fd477bc5a117, type: 3}
     m_ErrorOnUnregisteredVariant: 0
     m_UnregisteredVariants: []
