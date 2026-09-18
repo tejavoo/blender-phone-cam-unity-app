@@ -1,0 +1,43 @@
+# Unity generated folders
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]serSettings/
+
+# Visual Studio / VS Code / IDE files
+/.vs/
+/.vscode/
+/*.csproj
+/*.unityproj
+/*.sln
+/*.slnx
+/*.suo
+/*.user
+/*.userprefs
+/*.pidb
+/*.booproj
+/*.svd
+/*.pdb
+/*.opendb
+/*.VC.db
+
+# Unity Auto-generated Assets
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+[Tt]humbs.db
+
+# Builds & APKs
+# *.apk
+*.aab
+*.unitypackage
+.utmp/

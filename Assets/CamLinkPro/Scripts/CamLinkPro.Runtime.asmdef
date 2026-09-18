@@ -1,0 +1,19 @@
+{
+    "name": "CamLinkPro.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "Unity.XR.ARFoundation",
+        "Unity.InputSystem",
+        "Unity.XR.Management",
+        "Unity.XR.ARSubsystems"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
