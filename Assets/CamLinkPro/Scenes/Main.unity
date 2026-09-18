@@ -781,6 +781,8 @@ MonoBehaviour:
   controller: {fileID: 2020824430}
   qrScanner: {fileID: 2020824429}
   manualEntry: {fileID: 2020824428}
+  uiToolkitLandingRoot: {fileID: 1895615799}
+  uiToolkitLandingScreen: {fileID: 1895615800}
 --- !u!223 &1499571431
 Canvas:
   m_ObjectHideFlags: 0
@@ -977,6 +979,76 @@ MonoBehaviour:
   m_CameraFloorOffsetObject: {fileID: 752978590}
   m_RequestedTrackingOriginMode: 0
   m_CameraYOffset: 1.1176
+--- !u!1 &1895615799
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1895615802}
+  - component: {fileID: 1895615801}
+  - component: {fileID: 1895615800}
+  m_Layer: 0
+  m_Name: LandingUITK
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1895615800
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1895615799}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 402fe06b674d547b2a6e494b4d8fd11c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: CamLinkPro.Runtime::CamLinkPro.UI.LandingScreenUITK
+  controller: {fileID: 2020824430}
+  hud: {fileID: 1499571430}
+--- !u!114 &1895615801
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1895615799}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: 899cb59cce4d94031a6281cbeb47a91a, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 9197481963319205126, guid: 2342157808b0d4a0ea99312013bb37ab, type: 3}
+  m_SortingOrder: 5
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
+--- !u!4 &1895615802
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1895615799}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1910284681
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1712,3 +1784,4 @@ SceneRoots:
   - {fileID: 2020824431}
   - {fileID: 1499571432}
   - {fileID: 497033061}
+  - {fileID: 1895615802}

@@ -16,6 +16,11 @@ namespace CamLinkPro.App
         const string RecordCountdownKey = "CamLinkPro.Prefs.RecordCountdownSeconds";
         const string BigZoomSliderVisibleKey = "CamLinkPro.Prefs.BigZoomSliderVisible";
         const string ZoomSliderSensitivityKey = "CamLinkPro.Prefs.ZoomSliderSensitivity";
+        const string StatusStripVisibleKey = "CamLinkPro.Prefs.StatusStripVisible";
+        const string RigPresetRowVisibleKey = "CamLinkPro.Prefs.RigPresetRowVisible";
+        const string FreezeAxisRowVisibleKey = "CamLinkPro.Prefs.FreezeAxisRowVisible";
+        const string BottomControlBarVisibleKey = "CamLinkPro.Prefs.BottomControlBarVisible";
+        const string RecordReadinessWarningVisibleKey = "CamLinkPro.Prefs.RecordReadinessWarningVisible";
 
         public const float MinRecordCountdownSeconds = 0f;
         public const float MaxRecordCountdownSeconds = 10f;
@@ -31,6 +36,11 @@ namespace CamLinkPro.App
         static float? recordCountdownSeconds;
         static bool? bigZoomSliderVisible;
         static float? zoomSliderSensitivity;
+        static bool? statusStripVisible;
+        static bool? rigPresetRowVisible;
+        static bool? freezeAxisRowVisible;
+        static bool? bottomControlBarVisible;
+        static bool? recordReadinessWarningVisible;
 
         /// <summary>Verbose pose/XR-subsystem diagnostics to logcat -- off by
         /// default (it's genuinely noisy), but this is exactly what pinned down
@@ -149,6 +159,43 @@ namespace CamLinkPro.App
                 PlayerPrefs.SetFloat(ZoomSliderSensitivityKey, clamped);
                 PlayerPrefs.Save();
             }
+        }
+
+        /// <summary>Per-element HUD visibility toggles (Settings -> App -> HUD
+        /// Visibility) -- each hides only the on-screen element, never the
+        /// underlying function, so turning one off can't strand a user (e.g.
+        /// freeze toggles still work from Settings even with the row hidden).
+        /// All default on except the zoom rocker (<see cref="BigZoomSliderVisible"/>,
+        /// already off by default above) -- this is purely decluttering, not a
+        /// safety-relevant default.</summary>
+        public static bool StatusStripVisible
+        {
+            get { statusStripVisible ??= PlayerPrefs.GetInt(StatusStripVisibleKey, 1) != 0; return statusStripVisible.Value; }
+            set { statusStripVisible = value; PlayerPrefs.SetInt(StatusStripVisibleKey, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        public static bool RigPresetRowVisible
+        {
+            get { rigPresetRowVisible ??= PlayerPrefs.GetInt(RigPresetRowVisibleKey, 1) != 0; return rigPresetRowVisible.Value; }
+            set { rigPresetRowVisible = value; PlayerPrefs.SetInt(RigPresetRowVisibleKey, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        public static bool FreezeAxisRowVisible
+        {
+            get { freezeAxisRowVisible ??= PlayerPrefs.GetInt(FreezeAxisRowVisibleKey, 1) != 0; return freezeAxisRowVisible.Value; }
+            set { freezeAxisRowVisible = value; PlayerPrefs.SetInt(FreezeAxisRowVisibleKey, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        public static bool BottomControlBarVisible
+        {
+            get { bottomControlBarVisible ??= PlayerPrefs.GetInt(BottomControlBarVisibleKey, 1) != 0; return bottomControlBarVisible.Value; }
+            set { bottomControlBarVisible = value; PlayerPrefs.SetInt(BottomControlBarVisibleKey, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        public static bool RecordReadinessWarningVisible
+        {
+            get { recordReadinessWarningVisible ??= PlayerPrefs.GetInt(RecordReadinessWarningVisibleKey, 1) != 0; return recordReadinessWarningVisible.Value; }
+            set { recordReadinessWarningVisible = value; PlayerPrefs.SetInt(RecordReadinessWarningVisibleKey, value ? 1 : 0); PlayerPrefs.Save(); }
         }
     }
 }

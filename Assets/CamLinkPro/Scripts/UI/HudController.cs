@@ -42,6 +42,14 @@ namespace CamLinkPro.UI
         [SerializeField] QRPairingScanner qrScanner;
         [SerializeField] ManualPairingEntry manualEntry;
 
+        /// <summary>The UI Toolkit Landing screen's GameObject (see
+        /// <see cref="LandingScreenUITK"/>) -- shown/hidden in lockstep with
+        /// the old (now permanently invisible) uGUI landingPanel, so this is
+        /// the only piece of "Phase 1 migration" wiring every existing
+        /// ShowScreen(landingPanel) call site needed.</summary>
+        [SerializeField] GameObject uiToolkitLandingRoot;
+        [SerializeField] LandingScreenUITK uiToolkitLandingScreen;
+
         static readonly Color PanelBg = new Color(0f, 0f, 0f, 0.45f);
         static readonly Color ButtonBg = new Color(1f, 1f, 1f, 0.15f);
         static readonly Color ButtonPressed = new Color(0.2f, 0.7f, 1f, 0.85f);
@@ -59,14 +67,36 @@ namespace CamLinkPro.UI
         GameObject settingsPanel;
         GameObject calibrationPanel; // ROP/ROR per-axis, reachable from Settings
         GameObject scanScreenPanel;
+        GameObject qrTimeoutOverlay;
+        float qrScanStartedAtUnscaled;
+        const float QrScanTimeoutSeconds = 25f;
         GameObject manualPanel;
         GameObject landingPairingGroup;
         GameObject landingConnectedGroup;
         GameObject recentConnectionsRow;
         GameObject debugOverlayRoot;
         GameObject confirmDialogPanel;
+        GameObject startingCameraPanel;
+        GameObject storageFullPanel;
+        Text storageFullText;
 
         GameObject screenBeforeSettings;
+
+        Text startingCameraChecklistText;
+        float arWarmupStartedAt;
+        const float ArWarmupMaxSeconds = 4f;
+
+        GameObject countdownOverlayPanel;
+        Text countdownBigText;
+
+        GameObject savedToastPanel;
+        Text savedToastText;
+        float recordingStartedAtUnscaled;
+        float savedToastHideAtUnscaled = -1f;
+        const float SavedToastDurationSeconds = 3.5f;
+
+        GameObject disconnectBannerPanel;
+        Text disconnectBannerText;
 
         Text landingStatusText;
         Image landingConnectionChip;
@@ -91,13 +121,25 @@ namespace CamLinkPro.UI
         Button stopButton;
         Button cancelButton;
 
+        GameObject statusIndicatorsGroup;
         Image connectionChip;
+        Text connectionStateText;
         Text connectionLatencyText;
         Text calibrationBadge;
+        GameObject blenderStatusRow;
         Image blenderLiveChip;
         Text blenderLiveText;
         Text poseSendingText;
         Text recordReadinessWarningText;
+        GameObject rigRow;
+        GameObject freezeRow;
+        GameObject bottomBar;
+
+        Toggle statusStripVisibilityToggle;
+        Toggle rigPresetRowVisibilityToggle;
+        Toggle freezeAxisRowVisibilityToggle;
+        Toggle bottomBarVisibilityToggle;
+        Toggle recordReadinessWarningVisibilityToggle;
 
         Text confirmDialogText;
         System.Action confirmDialogAction;
@@ -119,6 +161,7 @@ namespace CamLinkPro.UI
         InputField recordDelayField;
         Toggle bigZoomVisibilityToggle;
         InputField zoomSensitivityField;
+        Text liveCameraReadoutText;
         Text positionOffsetText;
         Text rotationOffsetText;
         readonly InputField[] posOffsetFields = new InputField[3];
@@ -132,6 +175,30 @@ namespace CamLinkPro.UI
 
         void Awake()
         {
+            // UI Toolkit's runtime panels (LandingScreenUITK, Phase 1 of the
+            // uGUI -> UI Toolkit migration) read touch through the Input
+            // System's Enhanced Touch API directly, which is off by default --
+            // without this, taps land fine on the old uGUI screens (routed
+            // through EventSystem/InputSystemUIInputModule, unaffected by
+            // this flag) but silently do nothing on any UI Toolkit panel,
+            // with no error of any kind.
+            UnityEngine.InputSystem.EnhancedTouch.EnhancedTouchSupport.Enable();
+
+            // Belt-and-suspenders alongside the above: force uGUI's
+            // EventSystem to actually create the PanelEventHandler/
+            // PanelRaycaster bridge objects a runtime UI Toolkit panel needs
+            // to receive EventSystem-routed input at all (see
+            // UnityEngine.EventSystems.EventSystem.SetUITookitEventSystemOverride
+            // -- obsolete API, but the only public entry point into this,
+            // and the automatic default-config path wasn't creating them on
+            // its own in this project).
+#pragma warning disable CS0618
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current
+                ?? FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>();
+            if (eventSystem != null)
+                UnityEngine.EventSystems.EventSystem.SetUITookitEventSystemOverride(eventSystem, sendEvents: true, createPanelGameObjectsOnStart: true);
+#pragma warning restore CS0618
+
             var canvas = GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 10;
@@ -148,17 +215,29 @@ namespace CamLinkPro.UI
             BuildLandingPanel();
             BuildScanScreen();
             BuildHudPanel();
+            BuildStartingCameraPanel();
             BuildSettingsPanel();
             BuildCalibrationScreen();
             BuildDebugOverlay();
             BuildConfirmDialog();
 
+            // Lazy AR start: the camera (and the battery drain/heat that
+            // comes with it) only runs while the Recording HUD is actually
+            // open -- see OpenRecordingHud/CloseRecordingHud/SetArSessionEnabled.
+            SetArSessionEnabled(false);
+            RefreshHudVisibility();
+
             if (controller != null)
             {
                 controller.OnPairedChanged += RefreshLandingConnectionUi;
                 controller.OnRecordStateChanged += UpdateRecordUi;
-                controller.OnCountdownTick += sec => recordStatusText.text = $"Starting in {sec}...";
+                controller.OnCountdownTick += sec =>
+                {
+                    recordStatusText.text = $"Starting in {sec}...";
+                    if (countdownBigText != null) countdownBigText.text = sec.ToString();
+                };
                 controller.OnChannelStateChanged += RefreshConnectionChip;
+                controller.OnChannelStateChanged += RefreshDisconnectBanner;
                 controller.OnChannelStateChanged += _ => RefreshLandingConnectionUi(controller.IsPaired);
                 controller.OnBlenderLiveStateChanged += _ => RefreshLandingConnectionUi(controller.IsPaired);
                 controller.OnBlenderLiveStateChanged += RefreshBlenderLiveChip;
@@ -190,6 +269,23 @@ namespace CamLinkPro.UI
             RefreshPoseSendingLabel();
             RefreshWifiWarning();
             DriveBigZoomSlider();
+            RefreshLiveCameraReadout();
+            if (startingCameraPanel != null && startingCameraPanel.activeSelf) RefreshArWarmup();
+            if (savedToastHideAtUnscaled >= 0f && Time.unscaledTime >= savedToastHideAtUnscaled)
+            {
+                savedToastPanel.SetActive(false);
+                savedToastHideAtUnscaled = -1f;
+            }
+            RefreshQrScanTimeout();
+        }
+
+        void RefreshQrScanTimeout()
+        {
+            if (scanScreenPanel == null || !scanScreenPanel.activeSelf) return;
+            if (qrTimeoutOverlay == null || qrTimeoutOverlay.activeSelf) return;
+            if (Time.unscaledTime - qrScanStartedAtUnscaled < QrScanTimeoutSeconds) return;
+            qrScanner?.Close();
+            qrTimeoutOverlay.SetActive(true);
         }
 
         /// <summary>Blender is always reached over the local network, so
@@ -234,6 +330,31 @@ namespace CamLinkPro.UI
             if (calibrationBadge.gameObject.activeSelf != active) calibrationBadge.gameObject.SetActive(active);
         }
 
+        /// <summary>Applies the Settings -> App -> HUD Visibility toggles to
+        /// the actual HUD rows. Purely cosmetic -- every one of these keeps
+        /// working from Settings/its own code path even hidden here, so
+        /// turning an element off can't strand anyone.</summary>
+        void RefreshHudVisibility()
+        {
+            if (statusIndicatorsGroup != null) statusIndicatorsGroup.SetActive(AppPreferences.StatusStripVisible);
+            if (blenderStatusRow != null) blenderStatusRow.SetActive(AppPreferences.StatusStripVisible);
+            if (rigRow != null) rigRow.SetActive(AppPreferences.RigPresetRowVisible);
+            if (freezeRow != null) freezeRow.SetActive(AppPreferences.FreezeAxisRowVisible);
+            if (bottomBar != null) bottomBar.SetActive(AppPreferences.BottomControlBarVisible);
+        }
+
+        /// <summary>Read-only readout of the two Blender-camera values already
+        /// on the wire today (focal_length_mm/sensor_width_mm in every pose
+        /// packet) -- Settings -> Blender Camera. Polled only while Settings
+        /// is open.</summary>
+        void RefreshLiveCameraReadout()
+        {
+            if (liveCameraReadoutText == null || controller == null || !settingsPanel.activeSelf) return;
+            liveCameraReadoutText.text = controller.HasRawPose && controller.PoseSource != null
+                ? $"{controller.Zoom.Resolve(controller.PoseSource.LiveFocalLengthMm):0.#}mm / {AR.ZoomState.SensorWidthMm:0.#}mm"
+                : "-- (no live pose yet)";
+        }
+
         void ShowScreen(GameObject screen)
         {
             landingPanel.SetActive(screen == landingPanel);
@@ -241,6 +362,12 @@ namespace CamLinkPro.UI
             settingsPanel.SetActive(screen == settingsPanel);
             calibrationPanel.SetActive(screen == calibrationPanel);
             scanScreenPanel.SetActive(screen == scanScreenPanel);
+            if (startingCameraPanel != null) startingCameraPanel.SetActive(screen == startingCameraPanel);
+            if (storageFullPanel != null) storageFullPanel.SetActive(screen == storageFullPanel);
+            // Parked -- see the UiToolkitMigrationEnabled note in
+            // BuildLandingPanel(). Kept permanently inactive until the
+            // runtime-panel input issue is actually resolved.
+            if (uiToolkitLandingRoot != null) uiToolkitLandingRoot.SetActive(false);
             // The always-on pose readout only matters once you're actually
             // shooting -- keep it off the other screens to reduce clutter.
             if (debugOverlayRoot != null) debugOverlayRoot.SetActive(screen == hudPanel);
@@ -250,6 +377,16 @@ namespace CamLinkPro.UI
                 RefreshBigZoomSliderVisibility();
             }
         }
+
+        // -- Bridge for the UI Toolkit Landing screen (LandingScreenUITK) --
+        // the old uGUI Landing panel this HudController still builds stays
+        // permanently invisible (see uiToolkitLandingRoot below); these three
+        // just forward to the exact same navigation the old uGUI Landing
+        // buttons already used, so migrating Landing's *visuals* didn't need
+        // to touch any of the *destination* screens' logic at all.
+        internal void NavigateToScanQr() => OpenQrScan();
+        internal void NavigateToSettingsFromLanding() => OpenSettingsFrom(landingPanel);
+        internal void NavigateToRecordingHud() => OpenRecordingHud();
 
         void OpenSettingsFrom(GameObject returnScreen)
         {
@@ -383,6 +520,30 @@ namespace CamLinkPro.UI
         void BuildLandingPanel()
         {
             landingPanel = CreatePanel(transform, "LandingPanel", stretch: true);
+
+            // Phase 1 of the UI Toolkit migration (LandingScreenUITK,
+            // Assets/CamLinkPro/UIToolkit/Landing.uxml) rendered beautifully
+            // on-device -- a real visual improvement over this uGUI screen,
+            // matching the reviewed mockup much more closely -- but every
+            // tap on it is silently swallowed: no PointerDownEvent, no
+            // click, nothing, even on a full-screen catch-all handler.
+            // EnhancedTouchSupport.Enable() and the documented (if obsolete)
+            // EventSystem.SetUITookitEventSystemOverride() override both
+            // failed to fix it; the actual root cause needs Unity-support-
+            // level investigation, not more guessing. Until it's solved,
+            // UiToolkitMigrationEnabled stays false so this uGUI screen --
+            // which works -- keeps running the real Landing UI. The new
+            // GameObject (LandingUITK) is left in the scene, inactive, so
+            // the next session can pick this up without rebuilding it.
+            const bool UiToolkitMigrationEnabled = false;
+            if (UiToolkitMigrationEnabled)
+            {
+                var invisibility = landingPanel.AddComponent<CanvasGroup>();
+                invisibility.alpha = 0f;
+                invisibility.interactable = false;
+                invisibility.blocksRaycasts = false;
+            }
+
             var layout = landingPanel.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.spacing = 20;
@@ -425,12 +586,7 @@ namespace CamLinkPro.UI
             recentConnectionsRow = CreateRow(landingPairingGroup.transform, "RecentConnectionsRow");
 
             var modeRow = CreateRow(landingPairingGroup.transform, "ModeRow");
-            CreateButton(modeRow.transform, "Scan QR", () =>
-            {
-                ShowScreen(scanScreenPanel);
-                SetArSessionPausedForQrScan(true);
-                qrScanner?.Open();
-            });
+            CreateButton(modeRow.transform, "Scan QR", OpenQrScan);
             CreateButton(modeRow.transform, "Enter Manually", () =>
             {
                 bool opening = !manualPanel.activeSelf;
@@ -447,7 +603,7 @@ namespace CamLinkPro.UI
             // Always visible on Landing regardless of paired state.
             var bottomRow = CreateRow(landingPanel.transform, "LandingBottomRow");
             CreateButton(bottomRow.transform, "Settings", () => OpenSettingsFrom(landingPanel));
-            letsRecordButton = CreateButton(bottomRow.transform, "Let's Record", () => ShowScreen(hudPanel));
+            letsRecordButton = CreateButton(bottomRow.transform, "Let's Record", OpenRecordingHud);
         }
 
         void RefreshLandingConnectionUi(bool paired)
@@ -604,7 +760,13 @@ namespace CamLinkPro.UI
                 // the connections.
                 qrScanner.OnPaired += info =>
                 {
-                    SetArSessionPausedForQrScan(false);
+                    if (qrTimeoutOverlay != null) qrTimeoutOverlay.SetActive(false);
+                    // Back to Landing, which -- under lazy AR start -- stays
+                    // camera-off, same as Cancel below. QRPairingScanner
+                    // releasing its own WebCamTexture on Close() is what
+                    // actually frees the physical camera; nothing here needs
+                    // to hand it back to the AR session anymore.
+                    SetArSessionEnabled(false);
                     manualEntry?.Prefill(info);
                     ShowScreen(landingPanel);
                     manualPanel.SetActive(true);
@@ -613,29 +775,147 @@ namespace CamLinkPro.UI
                         manualConfirmText.text = "QR scanned successfully -- review and connect below.";
                         manualConfirmText.gameObject.SetActive(true);
                     }
+                    uiToolkitLandingScreen?.PrefillFromScan(info);
                 };
             }
 
             CreateLabel(scanScreenPanel.transform, "Point the camera at the pairing QR shown by Blender.", 18);
-            CreateButton(scanScreenPanel.transform, "Cancel", () =>
-            {
-                qrScanner?.Close();
-                SetArSessionPausedForQrScan(false);
-                ShowScreen(landingPanel);
-            });
+            CreateButton(scanScreenPanel.transform, "Cancel", CancelQrScan);
+
+            BuildQrTimeoutOverlay();
         }
 
-        /// <summary>Pausing the AR session (not just hiding the scan screen)
-        /// releases its hold on the physical camera while QRPairingScanner's
-        /// own separate WebCamTexture is open -- two simultaneous camera
-        /// clients on Android is exactly the setup that made the QR preview
-        /// freeze/go black after a few seconds with no way to recover short
-        /// of restarting the app, since disabling the RawImage alone doesn't
-        /// resolve contention over the camera hardware itself.</summary>
-        void SetArSessionPausedForQrScan(bool paused)
+        /// <summary>Opens Scan QR -- shared by Landing's "Scan QR" button and
+        /// the timeout overlay's "Try Again", so both start the same clean
+        /// state (timer reset, overlay hidden).</summary>
+        void OpenQrScan()
+        {
+            ShowScreen(scanScreenPanel);
+            if (qrTimeoutOverlay != null) qrTimeoutOverlay.SetActive(false);
+            qrScanStartedAtUnscaled = Time.unscaledTime;
+            // Already off by default (lazy AR start -- see
+            // SetArSessionEnabled) whenever Landing is showing, but explicit
+            // here too in case a future entry point into Scan QR ever isn't
+            // from Landing.
+            SetArSessionEnabled(false);
+            qrScanner?.Open();
+        }
+
+        void CancelQrScan()
+        {
+            qrScanner?.Close();
+            SetArSessionEnabled(false);
+            if (qrTimeoutOverlay != null) qrTimeoutOverlay.SetActive(false);
+            ShowScreen(landingPanel);
+        }
+
+        /// <summary>A QR scan that never finds a valid code (Blender's panel
+        /// isn't open, wrong Wi-Fi network, bad lighting) previously just left
+        /// the camera preview running forever with only a manual Cancel as a
+        /// way out. Now it times out into an explicit, friendly dead end with
+        /// the same three ways forward the mockup review called for: retry,
+        /// fall back to manual entry, or give up.</summary>
+        void BuildQrTimeoutOverlay()
+        {
+            // A child of the Canvas root, NOT of scanScreenPanel -- that panel
+            // has its own VerticalLayoutGroup for its title/preview/subtext/
+            // Cancel stack, which would otherwise sweep a "stretch" overlay
+            // into that stacking flow (positioned/sized as just another list
+            // row) instead of actually covering the screen.
+            qrTimeoutOverlay = CreatePanel(transform, "QrTimeoutOverlay", stretch: true);
+            qrTimeoutOverlay.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.88f);
+            var layout = qrTimeoutOverlay.AddComponent<VerticalLayoutGroup>();
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.spacing = 14;
+
+            CreateLabel(qrTimeoutOverlay.transform, "Couldn't find a pairing QR code", 24);
+            var sub = CreateLabel(qrTimeoutOverlay.transform, "Make sure Blender's Cam Link Pro panel is showing its QR and this phone is on the same Wi-Fi network.", 16);
+            sub.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var subRt = sub.GetComponent<RectTransform>();
+            var subLe = sub.gameObject.AddComponent<LayoutElement>();
+            subLe.preferredWidth = 700;
+
+            var row = CreateRow(qrTimeoutOverlay.transform, "QrTimeoutRow");
+            CreateButton(row.transform, "Try Again", OpenQrScan);
+            CreateButton(row.transform, "Enter Manually", () =>
+            {
+                qrScanner?.Close();
+                SetArSessionEnabled(false);
+                qrTimeoutOverlay.SetActive(false);
+                ShowScreen(landingPanel);
+                manualPanel.SetActive(true);
+            });
+            CreateButton(row.transform, "Cancel", CancelQrScan);
+
+            qrTimeoutOverlay.SetActive(false);
+        }
+
+        /// <summary>Central on/off switch for the AR camera session. Used for
+        /// two different reasons: (1) releasing its hold on the physical
+        /// camera while QRPairingScanner's own separate WebCamTexture is open
+        /// -- two simultaneous camera clients on Android is exactly the setup
+        /// that made the QR preview freeze/go black after a few seconds with
+        /// no way to recover short of restarting the app, since disabling the
+        /// RawImage alone doesn't resolve contention over the camera hardware
+        /// itself; and (2) the lazy-start policy below -- the AR camera (and
+        /// the battery drain/heat that comes with it) now only runs while the
+        /// Recording HUD is actually open, not from app launch.</summary>
+        void SetArSessionEnabled(bool enabled)
         {
             var session = controller != null ? controller.PoseSource?.Session : null;
-            if (session != null) session.enabled = !paused;
+            if (session != null) session.enabled = enabled;
+        }
+
+        /// <summary>Entry point for "Let's Record" -- starts the AR session
+        /// (previously off; see <see cref="SetArSessionEnabled"/>) and shows a
+        /// brief loading screen while it warms up, instead of cutting straight
+        /// to a HUD whose pose feed isn't live yet.</summary>
+        void OpenRecordingHud()
+        {
+            long freeBytes = DeviceStorage.GetFreeBytes();
+            if (freeBytes >= 0 && freeBytes < DeviceStorage.LowStorageThresholdBytes)
+            {
+                if (storageFullText != null)
+                    storageFullText.text = $"Free at least 500 MB on this device and try again.\n\nFree space: {DeviceStorage.FormatMegabytes(freeBytes)}";
+                ShowScreen(storageFullPanel);
+                return;
+            }
+
+            SetArSessionEnabled(true);
+            arWarmupStartedAt = Time.unscaledTime;
+            if (startingCameraChecklistText != null) startingCameraChecklistText.text = "";
+            ShowScreen(startingCameraPanel);
+        }
+
+        /// <summary>Home button out of the Recording HUD -- stops the AR
+        /// session again so it's never left running in the background while
+        /// the app just sits on Landing or Settings.</summary>
+        void CloseRecordingHud()
+        {
+            SetArSessionEnabled(false);
+            ShowScreen(landingPanel);
+        }
+
+        /// <summary>Polled while <see cref="startingCameraPanel"/> is showing --
+        /// advances to the HUD once AR tracking is actually up, or after
+        /// <see cref="ArWarmupMaxSeconds"/> regardless, so a phone that's slow
+        /// (or never) reaching SessionTracking can't strand the user on a
+        /// loading screen forever.</summary>
+        void RefreshArWarmup()
+        {
+            bool tracking = controller != null && controller.PoseSource != null && controller.PoseSource.TrackingReliable;
+            float elapsed = Time.unscaledTime - arWarmupStartedAt;
+
+            if (startingCameraChecklistText != null)
+            {
+                string batteryLine = SystemInfo.batteryLevel >= 0f
+                    ? $"Battery {SystemInfo.batteryLevel * 100f:0}%"
+                    : null;
+                string trackingLine = tracking ? "AR tracking ready" : "Waiting for AR tracking...";
+                startingCameraChecklistText.text = batteryLine != null ? $"{batteryLine}\n{trackingLine}" : trackingLine;
+            }
+
+            if (tracking || elapsed >= ArWarmupMaxSeconds) ShowScreen(hudPanel);
         }
 
         // -- Recording (HUD) panel --------------------------------------------------
@@ -650,6 +930,128 @@ namespace CamLinkPro.UI
             BuildBottomBar();
             BuildRecordControls();
             BuildBigZoomSlider();
+            BuildCountdownOverlay();
+            BuildSavedToast();
+            BuildDisconnectBanner();
+        }
+
+        /// <summary>Real, signal-driven banner (off <see cref="ChannelState"/>,
+        /// not a mock) -- the TCP command channel can drop mid-take without
+        /// the local RecordUiState machine ever hearing REC_OFF, which would
+        /// otherwise leave the HUD quietly claiming "Recording" while nothing
+        /// is actually reaching Blender any more. Positioned just below
+        /// TopBar's fixed 200px band, not overlapping its nav/status rows.</summary>
+        void BuildDisconnectBanner()
+        {
+            disconnectBannerPanel = CreatePanel(hudPanel.transform, "DisconnectBanner", stretch: false);
+            var rt = disconnectBannerPanel.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, 1);
+            rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(0.5f, 1);
+            rt.anchoredPosition = new Vector2(0, -200);
+            rt.sizeDelta = new Vector2(0, 48);
+            var img = disconnectBannerPanel.GetComponent<Image>();
+            img.color = new Color(0.35f, 0.08f, 0.08f, 0.92f);
+            img.raycastTarget = false;
+
+            disconnectBannerText = CreateLabel(disconnectBannerPanel.transform, "Blender disconnected -- recording may not be saving", 18);
+            disconnectBannerText.color = Color.white;
+            disconnectBannerText.raycastTarget = false;
+
+            disconnectBannerPanel.SetActive(false);
+        }
+
+        void RefreshDisconnectBanner(ChannelState state)
+        {
+            if (disconnectBannerPanel == null || controller == null) return;
+            disconnectBannerPanel.SetActive(state != ChannelState.Connected && controller.RecordState == RecordUiState.Recording);
+        }
+
+        /// <summary>Small top-center confirmation shown right after a
+        /// Recording -> Live transition (see <see cref="ShowSavedToast"/>) --
+        /// closes the "did that actually save?" gap a silent return to Idle
+        /// left open.</summary>
+        void BuildSavedToast()
+        {
+            savedToastPanel = CreatePanel(hudPanel.transform, "SavedToast", stretch: false);
+            var rt = savedToastPanel.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = new Vector2(0, -80);
+            rt.sizeDelta = new Vector2(440, 64);
+            var img = savedToastPanel.GetComponent<Image>();
+            img.color = new Color(0.04f, 0.09f, 0.06f, 0.92f);
+            img.raycastTarget = false;
+
+            savedToastText = CreateLabel(savedToastPanel.transform, "", 18);
+            savedToastText.color = ChipGreen;
+            savedToastText.raycastTarget = false;
+
+            savedToastPanel.SetActive(false);
+        }
+
+        /// <summary>Big center-screen flash during the pre-roll countdown,
+        /// replacing the old small corner "Starting in Xs..." text (still
+        /// updated too, for the debug-overlay-adjacent record status label) --
+        /// built last so it's the topmost sibling and draws over everything
+        /// else in the HUD. Doesn't intercept touches (raycastTarget off on
+        /// both pieces): Cancel, on the record panel underneath, must stay
+        /// reachable during the countdown it's meant to interrupt.</summary>
+        void BuildCountdownOverlay()
+        {
+            countdownOverlayPanel = CreatePanel(hudPanel.transform, "CountdownOverlay", stretch: true);
+            var overlayImage = countdownOverlayPanel.GetComponent<Image>();
+            overlayImage.color = new Color(0f, 0f, 0f, 0.45f);
+            overlayImage.raycastTarget = false;
+
+            countdownBigText = CreateLabel(countdownOverlayPanel.transform, "", 140);
+            countdownBigText.raycastTarget = false;
+            var bigRt = countdownBigText.GetComponent<RectTransform>();
+            bigRt.anchorMin = bigRt.anchorMax = new Vector2(0.5f, 0.5f);
+            bigRt.sizeDelta = new Vector2(420, 220);
+
+            countdownOverlayPanel.SetActive(false);
+        }
+
+        /// <summary>Shown between "Let's Record" and the HUD actually
+        /// appearing, while the just-started AR session warms up -- see
+        /// <see cref="OpenRecordingHud"/>/<see cref="RefreshArWarmup"/>. A
+        /// separate top-level screen (like landingPanel/hudPanel), not a HUD
+        /// overlay, since the HUD's own pose-driven content has nothing
+        /// valid to show yet at this point.</summary>
+        void BuildStartingCameraPanel()
+        {
+            startingCameraPanel = CreatePanel(transform, "StartingCameraPanel", stretch: true);
+            var layout = startingCameraPanel.AddComponent<VerticalLayoutGroup>();
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.spacing = 14;
+
+            CreateLabel(startingCameraPanel.transform, "Starting camera...", 26);
+            CreateLabel(startingCameraPanel.transform, "Initializing AR tracking", 16);
+            startingCameraChecklistText = CreateLabel(startingCameraPanel.transform, "", 16);
+            startingCameraChecklistText.color = ChipGreen;
+
+            BuildStorageFullPanel();
+        }
+
+        /// <summary>Blocks "Let's Record" outright (real check -- see
+        /// <see cref="DeviceStorage"/> -- not a placeholder) when the device
+        /// is critically low on space, instead of letting a take start that's
+        /// likely to fail partway through.</summary>
+        void BuildStorageFullPanel()
+        {
+            storageFullPanel = CreatePanel(transform, "StorageFullPanel", stretch: true);
+            var layout = storageFullPanel.AddComponent<VerticalLayoutGroup>();
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.spacing = 16;
+
+            CreateLabel(storageFullPanel.transform, "Not enough storage to record", 26);
+            storageFullText = CreateLabel(storageFullPanel.transform, "", 16);
+            storageFullText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            storageFullText.alignment = TextAnchor.MiddleCenter;
+            var textLe = storageFullText.gameObject.AddComponent<LayoutElement>();
+            textLe.preferredWidth = 700;
+            CreateButton(storageFullPanel.transform, "Dismiss", () => ShowScreen(landingPanel));
         }
 
         void BuildTopBar()
@@ -667,12 +1069,21 @@ namespace CamLinkPro.UI
             layout.childAlignment = TextAnchor.UpperCenter;
 
             var navRow = CreateRow(topBar.transform, "NavRow");
-            CreateButton(navRow.transform, "< Home", () => ShowScreen(landingPanel));
+            CreateButton(navRow.transform, "< Home", CloseRecordingHud);
             CreateButton(navRow.transform, "Settings", () => OpenSettingsFrom(hudPanel));
 
-            connectionChip = CreateChip(navRow.transform);
-            connectionLatencyText = CreateLabel(navRow.transform, "--", 16);
-            calibrationBadge = CreateLabel(navRow.transform, "CAL", 14);
+            // Split out from the nav buttons above (which must always stay
+            // visible for navigation) so "Status Strip" visibility in
+            // Settings -> App only hides the status indicators, never Home/
+            // Settings themselves.
+            statusIndicatorsGroup = CreateRow(navRow.transform, "StatusIndicatorsGroup");
+            connectionChip = CreateChip(statusIndicatorsGroup.transform);
+            // Text alongside the chip, not just its color -- a color-only
+            // signal reads fine indoors but washes out in bright sunlight,
+            // and doesn't distinguish anything for color-vision deficiency.
+            connectionStateText = CreateLabel(statusIndicatorsGroup.transform, "Link: --", 16);
+            connectionLatencyText = CreateLabel(statusIndicatorsGroup.transform, "--", 16);
+            calibrationBadge = CreateLabel(statusIndicatorsGroup.transform, "CAL", 14);
             calibrationBadge.color = ButtonActiveBg;
             calibrationBadge.gameObject.SetActive(false);
 
@@ -682,12 +1093,12 @@ namespace CamLinkPro.UI
             // connected, first STATE line hasn't arrived yet" and "an older
             // add-on that predates this line" -- deliberately not red,
             // since neither of those is actually an error.
-            var blenderStatusRow = CreateRow(topBar.transform, "BlenderStatusRow");
+            blenderStatusRow = CreateRow(topBar.transform, "BlenderStatusRow");
             blenderLiveChip = CreateChip(blenderStatusRow.transform);
             blenderLiveText = CreateLabel(blenderStatusRow.transform, "Blender: --", 16);
             poseSendingText = CreateLabel(blenderStatusRow.transform, "Pose: --", 16);
 
-            var rigRow = CreateRow(topBar.transform, "RigRow");
+            rigRow = CreateRow(topBar.transform, "RigRow");
             var presets = new[] { RigPreset.Handheld, RigPreset.Tripod, RigPreset.Dolly, RigPreset.Crane };
             for (int i = 0; i < presets.Length; i++)
             {
@@ -695,7 +1106,7 @@ namespace CamLinkPro.UI
                 rigButtons[i] = CreateButton(rigRow.transform, preset.ToString(), () => ApplyPreset(preset));
             }
 
-            var freezeRow = CreateRow(topBar.transform, "FreezeRow");
+            freezeRow = CreateRow(topBar.transform, "FreezeRow");
             // Labelled with the underlying wire rotation channel too (which of
             // rot_x/y/z carries Tilt/Roll/Pan) -- placeholder text here, kept
             // truthful afterwards by RefreshRotationAxisLabels() since which
@@ -720,6 +1131,12 @@ namespace CamLinkPro.UI
                 ChannelState.Connected => ChipGreen,
                 ChannelState.Connecting => ChipYellow,
                 _ => ChipRed,
+            };
+            if (connectionStateText != null) connectionStateText.text = state switch
+            {
+                ChannelState.Connected => "Link: Connected",
+                ChannelState.Connecting => "Link: Connecting",
+                _ => "Link: Disconnected",
             };
             if (state != ChannelState.Connected && connectionLatencyText != null) connectionLatencyText.text = "--";
         }
@@ -760,7 +1177,27 @@ namespace CamLinkPro.UI
         /// this is purely an early, honest heads-up when we actually know.</summary>
         void RefreshRecordReadinessWarning(BlenderLiveState state)
         {
-            if (recordReadinessWarningText != null) recordReadinessWarningText.gameObject.SetActive(state == BlenderLiveState.Connected);
+            if (recordReadinessWarningText != null)
+                recordReadinessWarningText.gameObject.SetActive(state == BlenderLiveState.Connected && AppPreferences.RecordReadinessWarningVisible);
+            RefreshRecordButtonInteractable();
+        }
+
+        /// <summary>Gates Record on both the phone's own arm state and
+        /// Blender's actual live status. Without the second half, "Lock Start"
+        /// arming (which Blender can send unconditionally) let a user reach an
+        /// interactable Record button while Blender's add-on wasn't live yet --
+        /// pressing it sent START, which the add-on silently drops when
+        /// `is_live` is false (no ARMED/REC_ON-style error comes back), so the
+        /// button just looked broken: countdown, "Starting...", and nothing
+        /// ever recorded. Only the *known* not-live case (BlenderLiveState ==
+        /// Connected) blocks; Unknown -- an older add-on that never sends the
+        /// additive STATE line, or no info yet -- stays permissive so this
+        /// can't regress the original fixed-contract behaviour.</summary>
+        void RefreshRecordButtonInteractable()
+        {
+            if (recordButton == null || controller == null) return;
+            bool knownNotLive = controller.BlenderLiveState == BlenderLiveState.Connected;
+            recordButton.interactable = controller.RecordState == RecordUiState.Armed && !knownNotLive;
         }
 
         void BuildBottomBar()
@@ -770,7 +1207,7 @@ namespace CamLinkPro.UI
             // column that runs off the bottom of a short screen -- that's
             // exactly what was happening before (ROP/ROR and part of Dolly were
             // rendering below the visible screen entirely).
-            var bottomBar = CreatePanel(hudPanel.transform, "BottomBar", stretch: false);
+            bottomBar = CreatePanel(hudPanel.transform, "BottomBar", stretch: false);
             var rt = bottomBar.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0, 0);
             rt.anchorMax = new Vector2(0.82f, 0); // leaves the right ~18% clear of RecordPanel's column
@@ -929,6 +1366,11 @@ namespace CamLinkPro.UI
             recordDelayField.SetTextWithoutNotify(AppPreferences.RecordCountdownSeconds.ToString("0.#"));
             SetStateToggle(bigZoomVisibilityToggle, AppPreferences.BigZoomSliderVisible);
             zoomSensitivityField.SetTextWithoutNotify(AppPreferences.ZoomSliderSensitivity.ToString("0.##"));
+            SetStateToggle(statusStripVisibilityToggle, AppPreferences.StatusStripVisible);
+            SetStateToggle(rigPresetRowVisibilityToggle, AppPreferences.RigPresetRowVisible);
+            SetStateToggle(freezeAxisRowVisibilityToggle, AppPreferences.FreezeAxisRowVisible);
+            SetStateToggle(bottomBarVisibilityToggle, AppPreferences.BottomControlBarVisible);
+            SetStateToggle(recordReadinessWarningVisibilityToggle, AppPreferences.RecordReadinessWarningVisible);
             if (rotationRemapDropdown != null) rotationRemapDropdown.SetValueWithoutNotify((int)controller.Calibration.RotationRemap);
             RefreshRotationAxisLabels();
             RefreshCalibrationOffsetLabels();
@@ -1073,7 +1515,9 @@ namespace CamLinkPro.UI
 
             CreateLabel(leftCol, "Starting-Point Calibration (offset, ROP/ROR on Recording)", 20);
             positionOffsetText = CreateLabel(leftCol, "Position zero: none", 16);
+            CreateButton(leftCol, "Re-zero (ROP)", () => { controller?.CapturePositionZero(); RefreshCalibrationOffsetLabels(); });
             rotationOffsetText = CreateLabel(leftCol, "Rotation zero: none", 16);
+            CreateButton(leftCol, "Re-zero (ROR)", () => { controller?.CaptureRotationZero(); RefreshCalibrationOffsetLabels(); });
             CreateButton(leftCol, "Customize ROP / ROR per axis ->", OpenCalibrationScreen);
 
             CreateLabel(rightCol, "App", 20);
@@ -1098,6 +1542,47 @@ namespace CamLinkPro.UI
                 recordDelayField.SetTextWithoutNotify(AppPreferences.RecordCountdownSeconds.ToString("0.#"));
             });
 
+            CreateLabel(rightCol, "HUD Visibility (hides the element only -- never the function)", 20);
+            var statusStripVisRow = CreateRow(rightCol, "StatusStripVisibilityRow");
+            CreateLabel(statusStripVisRow.transform, "Status Strip (link / blender / pose)", 16);
+            statusStripVisibilityToggle = CreateStateToggle(statusStripVisRow.transform, v =>
+            {
+                AppPreferences.StatusStripVisible = v;
+                RefreshHudVisibility();
+            });
+
+            var rigRowVisRow = CreateRow(rightCol, "RigPresetRowVisibilityRow");
+            CreateLabel(rigRowVisRow.transform, "Rig Preset Row (Handheld/Tripod/Dolly/Crane)", 16);
+            rigPresetRowVisibilityToggle = CreateStateToggle(rigRowVisRow.transform, v =>
+            {
+                AppPreferences.RigPresetRowVisible = v;
+                RefreshHudVisibility();
+            });
+
+            var freezeRowVisRow = CreateRow(rightCol, "FreezeAxisRowVisibilityRow");
+            CreateLabel(freezeRowVisRow.transform, "Freeze-Axis Row (Pan/Tilt/Roll toggles)", 16);
+            freezeAxisRowVisibilityToggle = CreateStateToggle(freezeRowVisRow.transform, v =>
+            {
+                AppPreferences.FreezeAxisRowVisible = v;
+                RefreshHudVisibility();
+            });
+
+            var bottomBarVisRow = CreateRow(rightCol, "BottomBarVisibilityRow");
+            CreateLabel(bottomBarVisRow.transform, "Bottom Control Bar (Steady/Opacity/Zoom/Dolly/Zero Start)", 16);
+            bottomBarVisibilityToggle = CreateStateToggle(bottomBarVisRow.transform, v =>
+            {
+                AppPreferences.BottomControlBarVisible = v;
+                RefreshHudVisibility();
+            });
+
+            var readinessWarnVisRow = CreateRow(rightCol, "ReadinessWarningVisibilityRow");
+            CreateLabel(readinessWarnVisRow.transform, "Record-Readiness Warning Banner", 16);
+            recordReadinessWarningVisibilityToggle = CreateStateToggle(readinessWarnVisRow.transform, v =>
+            {
+                AppPreferences.RecordReadinessWarningVisible = v;
+                RefreshRecordReadinessWarning(controller != null ? controller.BlenderLiveState : BlenderLiveState.Unknown);
+            });
+
             CreateLabel(rightCol, "Camera Settings", 20);
             var bigZoomVisRow = CreateRow(rightCol, "BigZoomVisibilityRow");
             CreateLabel(bigZoomVisRow.transform, "Zoom Slider Visibility (big rocker beside Record)", 16);
@@ -1115,6 +1600,14 @@ namespace CamLinkPro.UI
                 if (float.TryParse(text, out float v)) AppPreferences.ZoomSliderSensitivity = v;
                 zoomSensitivityField.SetTextWithoutNotify(AppPreferences.ZoomSliderSensitivity.ToString("0.##"));
             });
+
+            CreateLabel(rightCol, "Blender Camera", 20);
+            var liveCamRow = CreateRow(rightCol, "LiveCameraReadoutRow");
+            CreateLabel(liveCamRow.transform, "Live from Blender (focal length / sensor width)", 14);
+            liveCameraReadoutText = CreateLabel(liveCamRow.transform, "--", 16);
+            liveCameraReadoutText.color = ChipGreen;
+
+            CreateLabel(rightCol, "Sensor height, lens distortion profile, stream quality and frame rate -- reserved for when the add-on exposes them. Not wired yet.", 13);
 
             CreateLabel(rightCol, "Connection", 20);
             settingsIpField = CreateInputField(rightCol, "IP address");
@@ -1307,8 +1800,10 @@ namespace CamLinkPro.UI
             };
 
             if (lockStartButton != null) lockStartButton.interactable = state == RecordUiState.Live;
-            if (recordButton != null) recordButton.interactable = state == RecordUiState.Armed;
+            RefreshRecordButtonInteractable();
             if (stopButton != null) stopButton.interactable = state == RecordUiState.Recording;
+            if (countdownOverlayPanel != null) countdownOverlayPanel.SetActive(state == RecordUiState.CountingDown);
+            if (controller != null) RefreshDisconnectBanner(controller.ChannelState);
             // Cancel works from Armed (un-arm locally), CountingDown (abort the
             // pre-roll before START is sent), and Starting (escape hatch if
             // Blender's REC_ON confirmation never arrives after START was sent
@@ -1326,7 +1821,26 @@ namespace CamLinkPro.UI
             {
                 Handheld.Vibrate();
             }
+            if (state == RecordUiState.Recording) recordingStartedAtUnscaled = Time.unscaledTime;
+            if (state == RecordUiState.Live && previousRecordState == RecordUiState.Recording)
+                ShowSavedToast(Time.unscaledTime - recordingStartedAtUnscaled);
             previousRecordState = state;
+        }
+
+        /// <summary>Confirms a stop actually happened, since the wire contract
+        /// only ever gives a bare REC_OFF -- no filename, no duration -- and a
+        /// silent return to Idle left it genuinely ambiguous whether the take
+        /// saved. The duration shown is measured locally (REC_ON to REC_OFF,
+        /// on this phone's clock), which is the only duration this side of the
+        /// wire actually has; it's not claiming to be Blender's exact saved
+        /// file length.</summary>
+        void ShowSavedToast(float elapsedSeconds)
+        {
+            if (savedToastPanel == null) return;
+            int totalSeconds = Mathf.Max(0, Mathf.RoundToInt(elapsedSeconds));
+            savedToastText.text = $"Recording stopped -- {totalSeconds / 60}:{totalSeconds % 60:00}";
+            savedToastPanel.SetActive(true);
+            savedToastHideAtUnscaled = Time.unscaledTime + SavedToastDurationSeconds;
         }
 
         // -- small uGUI builder helpers --------------------------------------------

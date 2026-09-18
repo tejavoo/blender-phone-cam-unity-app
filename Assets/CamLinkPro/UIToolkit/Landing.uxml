@@ -1,0 +1,61 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/CamLinkPro/UIToolkit/Theme.uss" />
+
+    <ui:VisualElement name="landing-screen" class="screen" style="padding: 32px;">
+
+        <ui:Label name="title-label" text="Cam Link Pro" class="label-title" style="margin-top: 8px;" />
+
+        <ui:VisualElement name="credit-row" class="row" style="margin-top: 8px;">
+            <ui:Label name="credit-made-with" text="Made with" class="label-credit" />
+            <ui:Label name="heart-glyph" text="&#9829;" style="color: #E5484D; font-size: 17px; margin-left: 6px; margin-right: 6px;" />
+            <ui:Label name="credit-by" text="by Teja" class="label-credit" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="middle-area" class="column-center">
+
+            <!-- Unpaired: pairing group -->
+            <ui:VisualElement name="pairing-group" style="align-items: center;">
+                <ui:Label text="Pair with the Blender add-on" class="label-body" style="margin-bottom: 10px;" />
+
+                <ui:Label name="wifi-warning-label" text="Wi-Fi is off -- turn it on to pair" class="label-small hidden" style="color: #E5484D; margin-bottom: 8px;" />
+
+                <ui:VisualElement name="recent-connections-row" class="row hidden" style="margin-bottom: 10px;" />
+
+                <ui:VisualElement class="row" style="margin-top: 6px;">
+                    <ui:Button name="scan-qr-button" text="Scan QR" class="btn" />
+                    <ui:Button name="enter-manually-button" text="Enter Manually" class="btn" />
+                </ui:VisualElement>
+
+                <ui:VisualElement name="manual-panel" class="hidden" style="align-items: center; margin-top: 16px; background-color: rgba(20,23,28,0.9); border-radius: 12px; padding: 20px;">
+                    <ui:Label text="Review and connect" class="label-body" style="margin-bottom: 8px;" />
+                    <ui:Label name="manual-confirm-label" text="" class="label-small hidden" style="color: #3DD68C; margin-bottom: 6px;" />
+                    <ui:Label name="manual-error-label" text="" class="label-small hidden" style="color: #E5484D; margin-bottom: 6px;" />
+                    <ui:TextField name="ip-field" label="" class="text-field" />
+                    <ui:TextField name="pose-port-field" label="" class="text-field" />
+                    <ui:TextField name="video-port-field" label="" class="text-field" />
+                    <ui:TextField name="token-field" label="" class="text-field" />
+                    <ui:Button name="manual-connect-button" text="Connect" class="btn btn--primary" style="margin-top: 8px;" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- Paired: connected group -->
+            <ui:VisualElement name="connected-group" class="hidden" style="align-items: center;">
+                <ui:VisualElement class="row" style="background-color: rgba(20,23,28,0.9); border-radius: 12px; padding: 16px 24px; border-width: 1px; border-color: #2A2F3A;">
+                    <ui:VisualElement name="status-dot" class="status-dot status-dot--good" />
+                    <ui:VisualElement>
+                        <ui:Label name="status-headline-label" text="Connected" style="font-size: 18px; color: #E8EAED;" />
+                        <ui:Label name="status-detail-label" text="" class="label-small" style="margin-top: 2px; -unity-text-align: upper-left;" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:Button name="repair-button" text="Re-pair" class="btn" style="margin-top: 12px; background-color: transparent; border-width: 0; color: #4A90FF;" />
+            </ui:VisualElement>
+
+        </ui:VisualElement>
+
+        <ui:VisualElement class="row" style="margin-bottom: 8px;">
+            <ui:Button name="settings-button" text="Settings" class="btn" />
+            <ui:Button name="lets-record-button" text="Let's Record" class="btn btn--primary" />
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</ui:UXML>

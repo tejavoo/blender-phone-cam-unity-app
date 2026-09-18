@@ -1,0 +1,151 @@
+/*
+ * Shared design tokens for the UI Toolkit rebuild of Cam Link Pro Mobile.
+ * Colors match the reviewed mockup (claude.ai/artifact/2sDLBzMfR4Hdf16u5V9tmW)
+ * exactly, so every migrated screen reads as one continuous app rather than
+ * drifting from what was already approved.
+ *
+ * USS custom properties (--name) are resolved per-element at runtime, so
+ * every rule below re-declares them on .screen (the root of each migrated
+ * screen) rather than relying on a single global :root, which UI Toolkit
+ * does not have.
+ */
+
+.screen {
+    --color-bg: #0B0D10;
+    --color-surface: #14171C;
+    --color-surface-2: #1D2129;
+    --color-surface-3: #262B35;
+    --color-border: #2A2F3A;
+    --color-text: #E8EAED;
+    --color-text-dim: #9AA2B1;
+    --color-text-faint: #656D7D;
+    --color-accent: #4A90FF;
+    --color-accent-dim: #22314A;
+    --color-danger: #E5484D;
+    --color-warning: #E8B339;
+    --color-success: #3DD68C;
+
+    flex-grow: 1;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+}
+
+.label-title {
+    font-size: 34px;
+    -unity-font-style: bold;
+    color: var(--color-text);
+    -unity-text-align: middle-center;
+}
+
+.label-credit {
+    font-size: 16px;
+    color: var(--color-text-dim);
+    -unity-text-align: middle-center;
+}
+
+.label-body {
+    font-size: 18px;
+    color: var(--color-text-dim);
+    -unity-text-align: middle-center;
+}
+
+.label-small {
+    font-size: 14px;
+    color: var(--color-text-faint);
+    -unity-text-align: middle-center;
+}
+
+.chip-pill {
+    background-color: var(--color-surface-2);
+    border-color: var(--color-border);
+    border-width: 1px;
+    border-radius: 999px;
+    padding: 8px 16px;
+    margin: 0 6px;
+    color: var(--color-text-dim);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+}
+
+.btn {
+    background-color: var(--color-surface-2);
+    border-width: 1px;
+    border-color: var(--color-border);
+    border-radius: 10px;
+    color: var(--color-text);
+    font-size: 16px;
+    padding: 14px 22px;
+    margin: 6px;
+    -unity-text-align: middle-center;
+    transition-property: background-color, scale;
+    transition-duration: 0.08s;
+}
+
+.btn:hover {
+    background-color: var(--color-surface-3);
+}
+
+.btn:active {
+    scale: 0.97 0.97;
+}
+
+.btn--primary {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+    -unity-font-style: bold;
+}
+
+.btn--primary:hover {
+    background-color: #5B9CFF;
+}
+
+.btn--primary:disabled {
+    background-color: var(--color-surface-2);
+    border-color: var(--color-border);
+    color: var(--color-text-faint);
+    opacity: 0.6;
+}
+
+.btn--danger {
+    background-color: #7A2426;
+    border-color: var(--color-danger);
+}
+
+.text-field {
+    background-color: var(--color-surface-2);
+    border-color: var(--color-border);
+    border-width: 1px;
+    border-radius: 8px;
+    color: var(--color-text);
+    padding: 10px 12px;
+    margin: 6px 0;
+    font-size: 16px;
+    min-width: 420px;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    margin-right: 8px;
+}
+
+.status-dot--good { background-color: var(--color-success); }
+.status-dot--warn { background-color: var(--color-warning); }
+.status-dot--bad { background-color: var(--color-danger); }
+
+.row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+.column-center {
+    flex-grow: 1;
+    align-items: center;
+    justify-content: center;
+}
+
+.hidden {
+    display: none;
+}
