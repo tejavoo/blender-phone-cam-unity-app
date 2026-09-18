@@ -290,7 +290,10 @@ namespace CamLinkPro.UI
             float t = Time.unscaledTime;
             float pump = 1f + 0.22f * Mathf.Max(0f, Mathf.Sin(t * 3.2f));
             creditHeartImage.rectTransform.localScale = new Vector3(pump, pump, 1f);
-            creditHeartImage.rectTransform.localRotation = Quaternion.Euler(0f, 0f, t * 40f);
+            // Spins around the vertical axis through the heart's center and
+            // its top cleft (where the two lobes meet) -- a flip/turn, not a
+            // flat clock-hand spin around the screen-facing Z axis.
+            creditHeartImage.rectTransform.localRotation = Quaternion.Euler(0f, t * 90f, 0f);
         }
 
         void RefreshQrScanTimeout()
