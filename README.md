@@ -45,7 +45,7 @@ Hub. Player Settings are already configured: package id
 ARM64. Build via **File > Build Settings > Build**, or:
 
 ```
-unity build /Users/ajithgonamanda/CamLinkPro --target Android
+unity build /path/to/CamLinkPro --target Android
 ```
 
 ## Third-party code
