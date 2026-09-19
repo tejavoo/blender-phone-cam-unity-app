@@ -1,0 +1,579 @@
+# Cam Link Pro — Complete Rebuild Specification
+
+Purpose of this document: a self-contained, dense technical + UX spec of the Cam Link Pro
+mobile app, written so a future engineering effort (by an LLM or a human) can rebuild the
+app from scratch — this time targeting Unity UI Toolkit instead of uGUI — without needing
+to re-derive the domain logic, the visual design, or re-discover the pitfalls hit on the
+first attempt. Source: branch `ui-reskin-v2-mockup-match` of the CamLinkPro Unity project,
+captured 2026-09-19. Every fact below was read directly from the actual source, not
+inferred or assumed.
+
+Written to be framework-agnostic wherever the content genuinely is (domain model, UX
+copy, networking protocol, math) and Unity-uGUI-specific only where that's inherent to
+"what was built" (Section 8), with the UI-Toolkit-specific guidance broken out
+separately (Section 9) since that's the actual point of this document.
+
+═══════════════════════════════════════════════════════════════════════════
+## 0. WHAT THE APP DOES (one paragraph)
+═══════════════════════════════════════════════════════════════════════════
+
+Cam Link Pro is a phone-as-camera-tracker companion app for a Blender add-on. The phone
+pairs with a desktop running Blender (via QR code or manual entry), then uses ARKit/ARCore
+(through Unity ARFoundation) to track the phone's real-world position and rotation and
+streams that pose over the local network to drive a virtual camera inside Blender in real
+time — the phone becomes a handheld camera rig for 3D animation/previz work. The app also
+issues record start/stop commands to Blender and receives a live low-res video preview
+back over the same connection. It never records video itself — Blender does the actual
+capture; the phone just drives the camera and shows status.
+
+═══════════════════════════════════════════════════════════════════════════
+## 1. NETWORKING PROTOCOL (framework-agnostic — reuse as-is)
+═══════════════════════════════════════════════════════════════════════════
+
+Two independent channels, opened together at pairing time, both addressed to the same IP:
+
+### 1.1 Pose channel — UDP, fire-and-forget
+- One UDP packet per pose sample. No ACK, no retry, no ordering guarantee assumed by
+  the receiver (a monotonic sequence_id is included so the receiver can detect
+  drops/reordering itself).
+- Wire format: ASCII, comma-separated, 5 decimal places, InvariantCulture:
+  `sequence_id,pos_x,pos_y,pos_z,rot_x,rot_y,rot_z,focal_length_mm,sensor_width_mm`
+  (9 fields total)
+- `sequence_id` = microseconds since the sender's `Stopwatch` was created
+  (`ElapsedTicks * 1_000_000 / Frequency`), monotonic, never resets during a session.
+- Default port: 5005 (configurable per-pairing).
+
+### 1.2 Command/video channel — single persistent TCP socket
+- Runs the actual socket I/O on a dedicated background thread; the main thread must call
+  a `Pump()`-style method once per frame to dispatch queued events on the main thread.
+- Reconnect backoff: fixed 1500ms between attempts.
+- On connect, immediately sends `AUTH <token>\n`.
+- Outgoing commands (newline-terminated ASCII): `START`, `STOP`, `LOCK_START`, `PING`.
+- Incoming status lines (newline-terminated ASCII): `REC_ON`, `REC_OFF`, `ARMED`, `PONG`,
+  and an additive `STATE <token>` line where token is one of `CONNECTED` / `LIVE_NODATA`
+  / `LIVE` (anything else, or absence of any STATE line yet, = `Unknown` — deliberately
+  NOT treated as an error state, just "no info yet").
+- Video frames: length-prefixed JPEG. 4-byte big-endian length prefix whose most
+  significant byte is always `0` (frames capped at 16 MiB) — this is exactly how a
+  receiver distinguishes "this is a video frame" from "this is a status text line" on
+  the same socket: peek the first byte, if it's `0` it's a length prefix, otherwise it's
+  ASCII text up to the next `\n`. Only the newest undelivered frame is kept; older
+  unconsumed frames are dropped (never buffer more than one frame behind).
+- Default port: 5006 (configurable per-pairing).
+- `ChannelState` enum: `Disconnected`, `Connecting`, `Connected`.
+- `BlenderLiveState` enum: `Unknown`, `Connected`, `LiveNoData`, `Live` (derived from the
+  `STATE` line above; `Live` = actively receiving pose data on Blender's side).
+
+### 1.3 Pairing
+- QR code payload format (regex-parsed): `camlink://<ip>:<pose_port>:<video_port>?t=<token>`
+  — ip is parsed permissively (not strict dotted-quad validation), both ports must be
+  1–65535, token matches `[A-Za-z0-9_-]+`.
+- `PairingInfo` struct: `{ Ip, PosePort, VideoPort, Token }`. `IsValid` = non-empty
+  Ip and Token, both ports in range.
+- Manual entry: same four fields, typed in directly, for scenarios where the QR won't
+  scan (bad lighting, no camera permission, etc).
+- Persistence: last-used pairing saved standalone (PlayerPrefs, key prefix
+  `CamLinkPro.Pairing.`); separate rolling history of the last 4 distinct pairings
+  (PlayerPrefs key `CamLinkPro.PairingHistory`, most-recent-first) shown as quick-connect
+  chips on the Landing screen ("192.168.0.9:5006" style labels).
+
+═══════════════════════════════════════════════════════════════════════════
+## 2. CALIBRATION / POSE MATH DOMAIN MODEL (framework-agnostic — reuse as-is)
+═══════════════════════════════════════════════════════════════════════════
+
+All persisted to PlayerPrefs under prefix `CamLinkPro.Calibration.`.
+
+- `PositionScale` (Vector3, default 1,1,1) — per-axis gain on raw AR position before send.
+- `PositionFlip[3]` (bool×3, default all false) — per-axis sign flip.
+- `RotationScale` (Vector3, default 1,1,1) — per-axis gain on raw AR rotation (degrees).
+- `RotationFlip[3]` (bool×3, default `{true, false, true}` — i.e. Tilt-X and Pan-Z
+  flipped by default, Roll-Y not).
+- `PositionOffset` (Vector3, default zero) — "ROP" (Reset Origin Position): a captured
+  raw position subtracted from every subsequent sample, so the capture moment becomes
+  (0,0,0).
+- `RotationOffsetDeg` (Vector3, default zero) — "ROR" (Reset Origin Rotation): same idea
+  for rotation, captured raw rotation becomes the level/forward reference.
+- `RotationRemap` enum: `XYZ, XZY (default), YXZ, YZX, ZXY, ZYX` — permutes which
+  semantic rotation axis (Tilt=phone's local X, Roll=local Y, Pan=local Z) lands in
+  which wire slot (rot_x, rot_y, rot_z). This exists because different phone mounting
+  orientations relative to the virtual camera rig need different channel mappings; it's
+  configured once per physical rig setup, not per session.
+- **Apply order (exact, do not reorder in a rebuild)**: offset is subtracted FIRST (from
+  the raw untransformed pose), THEN scale × flip is applied, THEN — for rotation only —
+  the remap permutation is applied last, just before the packet is written to the wire.
+- `CapturePositionZero()` / `CaptureRotationZero()`: read the controller's last RAW
+  (pre-calibration) pose and write it into `PositionOffset` / `RotationOffsetDeg`, then
+  persist. `ClearPositionZero()` / `ClearRotationZero()` zero them back out. Position and
+  rotation zeroing are fully independent operations (this is exactly why the mockup
+  shows them as two separate "Reset Origin" cards, not one merged control — see §5.5).
+- `LevelHorizon` (bool) — a stability fix for roll readings near ±90° pitch; exposed as
+  a plain on/off toggle, off by default.
+
+### 2.1 Zoom / focal length
+- `ZoomState.Mode` enum: `Auto` | `Manual`.
+  - Auto: focal length is continuously derived from the AR camera's live vertical FOV
+    via `FocalLengthFromVerticalFov()` — a pure-math conversion (vFOV + aspect ratio →
+    horizontal FOV → 35mm-equivalent focal length in mm). This is genuinely live data,
+    already on the wire in every pose packet.
+  - Manual: user sets focal length directly via a nudge control or numeric input,
+    clamped to [10, 300] mm; overrides the live-derived value until switched back to Auto.
+- `SensorWidthMm = 36f` — a fixed constant (full-frame equivalent), used only as the
+  reference for focal-length-to-FOV math, not itself a measured/live value. (The Settings
+  Camera tab shows this in the same green terminal-box style as focal length even though
+  it never changes — visual consistency, not because it's live.)
+
+### 2.2 Rig presets → axis freeze
+`RigPreset` enum: `Handheld, Tripod, Dolly, Crane`. Each maps to an `AxisFreezeState`
+(6 independent bools: PositionX/Y/Z, Pan/Tilt/Roll) that's applied on top of the
+calibrated pose before sending — frozen axes just stop updating, holding their last value:
+- `Handheld`: nothing frozen (full 6DoF).
+- `Tripod`: all three position axes frozen (rotation-only, like a tripod head).
+- `Dolly`: only position-Z frozen (moves on a rail, doesn't push/pull... actually
+  Z here is whichever axis the remap has assigned; check RotationRemap before assuming
+  world-space meaning).
+- `Crane`: position-X and position-Y frozen.
+Individual axes can also be freeze-toggled by hand on the Recording HUD regardless of
+which preset is selected (the preset just sets initial defaults for the 6 toggles).
+
+═══════════════════════════════════════════════════════════════════════════
+## 3. AR SESSION USAGE (Unity ARFoundation specifics — adapt per-engine if porting off Unity)
+═══════════════════════════════════════════════════════════════════════════
+
+- Requires a `Camera` + `ARCameraManager` + `ARSession`, plus (new Input System) a
+  `TrackedPoseDriver` bound to a `<HandheldARInputDevice>`.
+- **Gotcha discovered and worth preserving**: the ARSession's GameObject must also carry
+  an `ARInputManager` component, or the XR input subsystem's device never actually starts
+  — this fails *silently* (pose reads as static/zero, no error, no exception) rather than
+  throwing, which makes it a nasty one to diagnose blind. If a rebuild sees "AR tracking
+  never becomes ready" with no other symptom, check for this first.
+- `TrackingReliable` = `ARSession.state == ARSessionState.SessionTracking` — this is the
+  gate the "Starting camera…" preflight screen polls before advancing to the Recording HUD.
+- **AR session lifecycle gating exists and matters**: the AR camera session is explicitly
+  enabled only when entering the Recording HUD flow (right before the "Starting camera…"
+  preflight screen shows) and explicitly disabled on every path back out (Home, Settings,
+  QR-scan cancel, Landing). This is deliberate — an always-on AR camera drains battery and
+  generates heat, and also fights the QR scanner's own separate camera texture for the
+  physical camera resource if both try to run at once. A rebuild MUST preserve this
+  gating; do not initialize the AR session at app launch or leave it running while just
+  sitting on Landing/Settings.
+
+═══════════════════════════════════════════════════════════════════════════
+## 4. FULL SCREEN INVENTORY & UX FLOW
+═══════════════════════════════════════════════════════════════════════════
+
+Design reference for all of the following: the mockup artifact at
+`claude.ai/artifact/2sDLBzMfR4Hdf16u5V9tmW` ("Cam Link Pro Mockups") — treat that as the
+visual source of truth if it's still reachable; the descriptions below were captured from
+it and cross-checked against what was actually implemented.
+
+Global rule threaded through every screen: **hide-the-element-only, never hide the
+function**. Every optional HUD element (status strip, rig row, freeze row, bottom bar,
+readiness warning, terminal readout) has an independent visibility toggle in Settings, and
+turning one off only removes it visually — whatever it controlled is still fully
+functional and reachable some other way (usually still adjustable from Settings itself).
+
+### 4.1 Landing (home)
+Two states sharing one screen:
+- **Unpaired**: title "Cam Link Pro", subtitle "Made with ❤️ by Teja", body "Pair with the
+  Blender add-on", up to 4 recent-connection chips (from pairing history, tap to
+  reconnect), primary blue pill "Scan QR", secondary text-link "Enter Manually" (expands
+  an inline form: IP / pose port / video port / token / Connect), bottom bar: "Settings"
+  (always enabled) + "Let's Record" (disabled/greyed until paired).
+- **Paired**: status card with a colored+symbol dot, headline text (varies by
+  ChannelState/BlenderLiveState — see §1.1/2 above for the exact state names), a
+  sub-line showing `pose:<port> video/cmd:<port>`, "Re-pair" text link, bottom bar:
+  "Settings" + "Let's Record" (now the primary blue pill, since it's usable).
+- A proactive Wi-Fi-off warning ("Wi-Fi is off — turn it on to pair") shows only while
+  the unpaired pairing UI is visible and the device isn't on a LAN connection — catches
+  the single most common "why won't it pair" confusion before the user even tries.
+
+### 4.2 Scan QR
+Header "Scan QR", top-right pill "● CAMERA ACTIVE" (gold), a rounded dark viewfinder
+frame with animated corner brackets and a live camera preview inside it, instructional
+text below ("Point the camera at the pairing QR shown by Blender."), bottom "Cancel"
+button. 25-second timeout with no successful scan → QR-timeout unhappy-path overlay
+(§4.7). Successful scan prefills the manual-entry form on Landing with a "QR scanned
+successfully — review and connect below" confirmation, rather than connecting instantly
+— gives the user one look at what it parsed before committing.
+
+### 4.3 Starting camera… (AR preflight)
+Centered spinner, "Starting camera…" title, "Initializing AR tracking" subtitle, a small
+checklist below it: a Battery row (shown only if `SystemInfo.batteryLevel` is readable on
+this device) and an AR-tracking row that starts in a "pending" state (clock/schedule icon,
+amber) and flips to a green check-circle icon once `TrackingReliable` is true. Auto-
+advances to the Recording HUD the moment tracking is ready, or after a fixed timeout
+regardless (so a device that never reaches SessionTracking can't strand the user on a
+loading screen forever — currently 4 seconds).
+
+### 4.4 Recording HUD
+The main working screen, camera session live. Composition (all independently toggleable
+via §5's HUD Visibility prefs except the record panel itself):
+- Top-left: "< Home".
+- Top-center: status strip — two pill cards: `[dot] Link: <state> [latency box] [CAL
+  badge]` and `[dot] Blender: <state> [Pose: Sending/Not sending]`. The latency box and
+  the CAL badge are conditionally shown (CAL only while a calibration capture is fresh;
+  latency box gated by its own Terminal Readout toggle).
+- Top-right: "Settings".
+- Below status strip: rig-preset chip row (Handheld/Tripod/Dolly/Crane) and a small
+  freeze-axis toggle row (X/Y/Z/Pan-Y/Tilt-X/Roll-Z — labels are the semantic names,
+  which get relabeled live if Rotation Axis Remap changes).
+- Right side floating panel: state title ("Idle" / "Recording", the latter in bold red
+  with the whole screen getting a subtle red tint + border while active), "Lock Start"
+  toggle, "Record" button (primary, disabled while already recording), "Stop" button
+  (danger red, disabled while idle).
+- Right side, above the record panel: a vertical Zoom control (auto-labeled, or a slider
+  if the zoom-slider preference is on instead of +/- buttons).
+- Bottom bar: Steady slider, Opacity slider, Zoom +/- steppers, "Dolly <value>m" +
+  "Reset Origin" button, "Zero Start" section with ROP and ROR buttons (independent
+  captures — see §2).
+- Countdown state (after pressing Record, before it actually starts): a full-bleed giant
+  center-screen number counting down from the configured Record Delay (0–10s, default
+  2s), NOT a small corner label — this was an explicit visual upgrade over an earlier,
+  easy-to-miss small "Starting in Xs…" corner text.
+- Disconnect banner: dark red top banner, "⚠ Blender disconnected", explains recording is
+  paused on-device and gives a live countdown + "Reconnect" / "Stop & Save" — only shows
+  if the channel drops WHILE actively recording (not just any disconnect).
+- Saved-confirmation toast: after Stop, a brief green terminal-styled toast — "✓ Saved ·
+  <duration>" plus the filename — so it's never ambiguous whether the take actually wrote
+  to disk. Auto-dismisses after ~3.5s.
+
+### 4.5 Settings — 5 tabs
+Reached from Landing or the Recording HUD; "< Back" returns to whichever screen opened it.
+
+- **General**: a single Text Size slider (85%–200%, live-previews against a sample line)
+  — this is the one genuinely new addition beyond the original mockup, added to make the
+  whole app's type scale adjustable for accessibility/preference.
+- **Calibration**: "Pose Calibration (gain)" section — Position Scale/Flip and Rotation
+  Scale/Flip per-axis rows, Rotation Axis Remap dropdown, Horizon Level toggle. Below
+  that, "Starting-Point Calibration" — TWO SEPARATE CARDS (not one merged block — see
+  §2's note on why): "Reset Origin — Position (ROP)" with a description line, three green
+  terminal-style value boxes (X/Y/Z), and a "Re-zero" link; "Reset Origin — Rotation
+  (ROR)" mirrors it with Tilt/Roll/Pan boxes (axis-label text updates live if Rotation
+  Axis Remap changes). A "Customize ROP/ROR per axis →" link opens a dedicated full-screen
+  editor for hand-typing each offset value directly (§4.6).
+- **App**: Diagnostics Overlay toggle (verbose logcat, off by default), Keep Screen Awake
+  toggle (on by default), Zoom Slider toggle, Record Delay numeric field, then a "HUD
+  Visibility" section with one toggle per optional HUD element (Status Strip, Rig Preset
+  Row, Freeze-Axis Row, Bottom Control Bar, Record-Readiness Warning Banner, Terminal
+  Readout) — all default ON.
+- **Connection**: IP / Pose UDP port / Video-command TCP port / Token fields, error text
+  (hidden unless the last attempt failed), "Reconnect" + "Unpair" (danger-styled, confirms
+  via a modal before actually unpairing).
+- **Camera**: Zoom Slider Visibility toggle (the big rocker beside Record on the HUD) and
+  Zoom Slider Sensitivity field, then "Blender Camera" — a status line ("Live" / "-- (no
+  live pose yet)") and two separate green terminal boxes labeled "FOCAL LENGTH (MM)" and
+  "SENSOR WIDTH (MM)" (see §2.1 for which is actually live), then a note that sensor
+  height / lens distortion / stream quality / frame rate are reserved placeholders,
+  not wired up yet (the add-on doesn't expose them).
+
+### 4.6 Calibration screen (dedicated, reached from Settings → Calibration tab)
+Per-axis editable numeric fields for both ROP (Position, X/Y/Z) and ROR (Rotation,
+Tilt/Roll/Pan), each axis with its own "Capture Current" + "Clear" pair. This is the
+power-user version of the summary cards on the Settings tab — same underlying data,
+finer control.
+
+### 4.7 Unhappy-path screens (all reachable via a real failure, or a dev "(mock) simulate
+…" affordance from their parent screen during testing)
+- **QR scan timeout**: amber warning-triangle icon, "Couldn't find a pairing QR code",
+  body explaining to check Blender's panel + same Wi-Fi network, three buttons: "Try
+  Again" (primary), "Enter Manually", "Cancel".
+- **Blender disconnected mid-recording**: see §4.4's disconnect banner — this IS the
+  unhappy path, presented as an overlay banner rather than a full-screen takeover, since
+  recording keeps running locally-paused underneath it.
+- **Storage full**: red warning-triangle icon, "Not enough storage to record", body "Free
+  up at least 500 MB on this device, then try again," a red-bordered terminal-style box
+  showing free space in MB (the error-variant of the green terminal treatment — same
+  component, red instead of green), single "Dismiss" button back to Landing. Triggered by
+  a real free-space check (`DeviceStorage.GetFreeBytes() < 500MB`) at the moment "Let's
+  Record" is pressed, before the AR session even spins up.
+
+═══════════════════════════════════════════════════════════════════════════
+## 5. VISUAL DESIGN SYSTEM
+═══════════════════════════════════════════════════════════════════════════
+
+### 5.1 Palette (exact values used)
+- Panel background (translucent, lets an AR/camera feed show through where relevant):
+  `rgba(11,13,16, 0.55)` — `#0B0D10` at 55% alpha.
+- Card background (opaque): `#141719` at 97% alpha.
+- Button background (idle): `#1D2129` at 97% alpha.
+- Accent / primary CTA (solid, same value used for both idle "primary" buttons and
+  "pressed" feedback on secondary buttons): `#4A90FF`-ish — `rgb(0.29, 0.565, 1.0)`.
+- Danger/destructive: idle `rgb(0.478, 0.161, 0.176)`, pressed `rgb(0.898, 0.282, 0.302)`.
+- Status green (good/live): `rgb(0.239, 0.839, 0.549)`.
+- Status yellow (degraded/connecting): `rgb(0.910, 0.702, 0.224)`.
+- Status red (lost/error): `rgb(0.898, 0.282, 0.302)`.
+- Terminal-readout background: near-black, `rgb(0.02, 0.035, 0.03)` — deliberately
+  slightly green-tinted-black, not pure neutral black, to read as "screen/terminal"
+  rather than "just another dark box."
+
+### 5.2 Shape language
+- Buttons and cards: rounded corners (pill buttons use full-radius = height/2; cards use
+  a smaller fixed corner radius, roughly 14–20px at 1x). Soft drop shadow on every
+  button/card.
+- Status dots: small filled circles, deliberately kept SMALL relative to their adjacent
+  text (see §5.6 — this was corrected twice during the build after the first two passes
+  came out oversized).
+- Terminal value boxes: rounded rect, near-black fill, bold monospace-feeling value text
+  (Bold weight on whatever body font is in use — a genuinely monospaced font is a nice-to-
+  have, not load-bearing, since alignment isn't done via character-width math anywhere).
+
+### 5.3 Iconography
+Prefer a real icon glyph system over hand-drawn shapes or plain ASCII/Unicode characters.
+**Important lesson from the first build attempt**: do NOT assume a platform's default/
+built-in font has coverage for Unicode symbol/dingbat ranges (checkmarks ✓ U+2713,
+ballot-X ✗ U+2717, heart ♥/❤ U+2665/U+2764, etc). On this project, Unity's built-in
+LegacyRuntime.ttf (Arial-equivalent) silently rendered NONE of these as visible glyphs on
+a real Android device — not a fallback tofu box, just an empty gap, which is a much
+sneakier failure to catch in testing than an obviously-broken glyph. Solution used: Google
+Material Symbols, imported as an actual icon font with a verified codepoint-to-glyph
+mapping (don't guess codepoints from memory — extract the font's real cmap table and
+cross-check, since a single icon name can have multiple valid legacy-alias codepoints in
+the same font, but a wrong guess renders nothing with no error). Icons actually used:
+check_circle (good/success), warning (triangle, amber/red depending on severity), error
+(circle-!, unused directly but available), priority_high (single bar, used for "degraded"
+status dots), cancel (X, used for "lost" status dots).
+
+### 5.4 Typography
+Plain, clean sans-serif (the build used Arial/LegacyRuntime for body text; Material
+Symbols' own icon font is separate and only used for icon glyphs, never body text). A
+global font-scale user preference (0.85×–2.0×) should be treated as a first-class
+requirement from the start of a rebuild, not retrofitted — see §5.6.1 for why retrofitting
+it is nontrivial.
+
+### 5.5 The ROP/ROR "two cards, not one" rule
+Worth restating as its own point since it's easy to accidentally merge back into one
+control during a rebuild: Reset Origin Position and Reset Origin Rotation are two
+INDEPENDENT captures with independent Re-zero actions and independent underlying data.
+Always present them as two separate cards/sections with their own re-zero affordance,
+never as a single combined "reset everything" block.
+
+### 5.6 Status-dot accessibility requirement
+Every status dot (connection health, Blender live state) must carry a SYMBOL in addition
+to hue, not color alone — reads correctly outdoors in bright sunlight and for color-vision
+deficiency. Mapping: good → check_circle, degraded → priority_high, lost/error → cancel,
+unknown/no-info-yet → no symbol at all (deliberately not treated as an error state).
+
+#### 5.6.1 Chip/dot sizing — went through several corrective passes, land here directly
+Final sizes used (in the same abstract "px" unit uGUI used, i.e. roughly 1:1 with a
+1920-wide reference canvas — scale proportionally for a different reference resolution):
+Landing connected-status dot: 10. HUD status-strip dots (link, Blender-live): 7. Camera-
+active indicator dot (Scan QR screen): 6. The icon glyph inside each dot should NOT scale
+linearly all the way down with the dot — floor it at roughly 6 units regardless of how
+small the parent dot gets, or the symbol becomes illegible before the dot itself does.
+
+### 5.7 Live-telemetry "terminal readout" treatment
+Any genuinely-live numeric value (not a static label, not a placeholder) gets the boxed
+green-monospace-on-near-black treatment: link latency (ms) on the HUD status strip, focal
+length + sensor width on Settings' Camera tab, ROP/ROR axis values on the Calibration
+cards. The SAME component switches to red-on-near-black for an error/out-of-range value
+(used for the storage-full free-space readout). A value that's static/dummy/not-yet-wired
+should NOT get this treatment — it signals "this number is real and moving," so applying
+it to placeholder data is actively misleading.
+
+### 5.8 Motion (minimal, not yet fully built out in the uGUI pass — treat as a rebuild
+target, not a "these exact easing curves exist" spec)
+Expected micro-interactions, based on the mockup: a subtle pulsing heart icon on the
+credit line, a button-press scale-down feedback, the countdown number's per-second flash,
+toast slide-in/fade-out. None of these need bespoke hand-rolled tweening code — pick
+whatever the target framework's idiomatic animation system is (UI Toolkit has USS
+transitions + the `UIElements` `experimental.animation` API for exactly this).
+
+═══════════════════════════════════════════════════════════════════════════
+## 6. STATE MACHINES SUMMARY (cross-reference, all defined in §1–2, gathered here for
+## quick lookup)
+═══════════════════════════════════════════════════════════════════════════
+
+- `ChannelState`: Disconnected → Connecting → Connected (TCP command/video channel).
+- `BlenderLiveState`: Unknown → Connected → LiveNoData / Live (derived from the
+  additive STATE line on the TCP channel — Unknown is the safe "no info yet" default,
+  never treated as an error).
+- `RecordUiState`: referenced but not fully detailed above — at minimum has an `Idle` and
+  a `Recording` value (the disconnect banner only shows `state != Connected &&
+  RecordState == Recording`); check the actual enum in a fresh read of
+  `CamLinkSessionController.cs` before assuming a complete list, since this doc's source
+  agent didn't get a full dump of it.
+- `ZoomState.Mode`: Auto | Manual.
+- `RigPreset`: Handheld | Tripod | Dolly | Crane.
+
+═══════════════════════════════════════════════════════════════════════════
+## 7. FULL PREFERENCES TABLE (all PlayerPrefs-backed, prefix `CamLinkPro.Prefs.*`)
+═══════════════════════════════════════════════════════════════════════════
+
+| Preference | Default | Range/Type | Purpose |
+|---|---|---|---|
+| DiagnosticsOverlayEnabled | false | bool | verbose pose/XR logcat dump |
+| KeepScreenAwake | true | bool | prevents screen sleep while foregrounded |
+| ZoomSliderEnabled | false | bool | slider vs +/- buttons for zoom control |
+| RecordCountdownSeconds | 2.0 | float 0–10 | pre-record countdown duration |
+| BigZoomSliderVisible | false | bool | big rocker beside Record button |
+| ZoomSliderSensitivity | 1.0 | float 0.25–4 | rocker sensitivity multiplier |
+| StatusStripVisible | true | bool | HUD link/blender status row visibility |
+| RigPresetRowVisible | true | bool | HUD rig-preset chip row visibility |
+| FreezeAxisRowVisible | true | bool | HUD freeze-toggle row visibility |
+| BottomControlBarVisible | true | bool | HUD bottom control bar visibility |
+| RecordReadinessWarningVisible | true | bool | readiness warning banner visibility |
+| TerminalReadoutVisible | true | bool | HUD link-latency terminal box visibility |
+| FontScale | 1.0 | float 0.85–2.0 | global text-size multiplier |
+
+All follow the same pattern: nullable static cache field, lazy-load from PlayerPrefs on
+first read, write-through with `PlayerPrefs.Save()` on every set. A rebuild in a different
+persistence system (e.g. a proper settings file) should preserve the "hide only, never
+disable function" semantics these encode, not just the storage mechanism.
+
+═══════════════════════════════════════════════════════════════════════════
+## 8. WHAT WAS ACTUALLY BUILT (uGUI, this attempt) — tech stack for reference
+═══════════════════════════════════════════════════════════════════════════
+
+Unity 6000.6.0f1. Android target, IL2CPP, ARM64-only, min SDK 29, package id
+`com.camlinkpro.mobile`. New Input System exclusively (`activeInputHandler: 1`, legacy
+Input Manager disabled). Landscape-oriented via autorotation restriction (not a hard lock).
+
+Entire UI is procedurally built in code, once, at scene startup — a single 3000+-line
+`HudController.cs` builds every screen as sibling GameObjects under one root Canvas and
+shows/hides them via `SetActive`. This procedural-construction approach (vs. hand-authored
+prefabs) was a deliberate choice, reasoned as keeping "the whole UI in one reviewable,
+versioned place." Whether to keep that approach for a UI Toolkit rebuild is a real design
+choice — UI Toolkit's UXML/USS split is much better suited to hand-authored markup than
+uGUI's prefab workflow was, so the original reasoning for going fully-procedural may not
+carry over; consider UXML documents per screen instead.
+
+Non-Unity-official packages in use:
+- `com.coffee.ui-effect` 5.11.7 (shadows/outlines/color effects for uGUI Graphics)
+- `com.coffee.softmask-for-ugui` 3.6.5 (nested masking)
+- `com.gilzoide.flex-ui` 1.2.4 (Yoga/CSS-flexbox-style layout engine for uGUI)
+- `com.kyrylokuzyk.primetween` 1.4.11 (tweening — installed, not yet wired into any
+  animation at time of writing)
+- `com.convalise.unity-material-symbols` (git package — Google Material Symbols as
+  uGUI Text-subclass components; ships both Standard and Filled font weights, codepoints
+  verified against actual font cmap before use, see §5.3)
+- A vendored rounded-corners shader (kirevdokimov's MIT-licensed one) predates the
+  Material Symbols/PrimeTween additions — used before Coffee UIEffect covered some of
+  the same ground; redundant with it in places, not yet consolidated.
+
+Three assembly definitions: `CamLinkPro.Runtime` (everything, unrestricted platform —
+careful, this means Editor-only code must NOT live here), `CamLinkPro.EditorTools`
+(Editor-only, holds a headless CLI build entry point), `CamLinkPro.Tests` (EditMode tests,
+gated by `UNITY_INCLUDE_TESTS`).
+
+═══════════════════════════════════════════════════════════════════════════
+## 9. UI TOOLKIT REBUILD GUIDANCE — READ THIS BEFORE STARTING
+═══════════════════════════════════════════════════════════════════════════
+
+This is the actual point of this document. A UI Toolkit migration was attempted on this
+exact project and abandoned after extensive diagnosis. It is NOT abandoned because UI
+Toolkit can't work here — it's abandoned because a specific, reproducible touch-input bug
+was found and not fully root-caused within the time available, and the team chose to ship
+on the proven uGUI path rather than keep gambling on an unresolved Editor/platform bug.
+Everything below is what was learned; use it to avoid repeating the same multi-hour
+diagnostic loop.
+
+### 9.1 The bug, precisely
+Symptom: a UI Toolkit screen (`UIDocument` + UXML, Screen Space Overlay panel) renders
+perfectly on a real Android device, but NO pointer/touch event ever reaches it — not a
+`PointerDownEvent`, not a `ClickEvent`, nothing — even with a real physical finger tap
+(ruled out as an input-simulation artifact; also tested and ruled out adb's synthetic-tap
+quirks, which route through a distinct "Virtual" input device separate from the real
+touchscreen — use `adb shell input swipe x y x y 300` for a held-tap, not `input tap`,
+if testing this way, since a 2ms instant tap is too fast for some per-frame state checks
+to observe reliably).
+
+### 9.2 What was ruled OUT (confirmed NOT the cause, don't re-debug these)
+- **PanelSettings scale mode**: was set to `ConstantPhysicalSize` (DPI-driven); this DOES
+  cause a real, separate problem — it makes the whole element tree's `.layout`/
+  `.worldBound` report NaN forever if combined with a certain re-registration trick (see
+  9.3) — but is NOT the touch-dispatch root cause by itself. Use `ScaleWithScreenSize`
+  (`PanelScaleMode` enum: `ConstantPixelSize=0, ConstantPhysicalSize=1,
+  ScaleWithScreenSize=2` — note this ordering, it's easy to get backwards).
+- **UI Toolkit's own picking**: confirmed working correctly. `panel.Pick(panelSpacePoint)`
+  reliably found the correct element at the correct coordinates, on-device, once layout
+  was valid (see 9.3). The picking/geometry layer is NOT the problem.
+- **PanelRaycaster / EventSystem wiring**: confirmed all correctly configured —
+  `InputSystemUIInputModule` present and enabled on the EventSystem, its Point/Click
+  actions bound and enabled with real bindings, a `PanelRaycaster` component genuinely
+  registered as a scene-wide raycaster (Unity's EventSystem discovers raycasters globally,
+  not just ones parented under the EventSystem GameObject, so placement doesn't matter).
+  Directly invoking `PanelRaycaster.Raycast()` with a manually-built `PointerEventData` at
+  the exact touch screen-position, mirroring exactly what the input module does
+  internally, was the last test run before abandoning the investigation — that specific
+  result was never captured (session ended there). **This is the most promising next
+  diagnostic step for a fresh attempt**: if that direct call also returns zero hits
+  despite `panel.Pick()` succeeding on the same coordinates, the gap is somewhere in
+  `PanelRaycaster`'s own screen→panel space conversion specifically, not in
+  picking or in EventSystem wiring. If it DOES return a hit, the gap is further
+  downstream, in how the InputSystemUIInputModule turns a raycast hit into a dispatched
+  event.
+- **Touch vs Mouse device distinction**: not the cause — both were tested.
+
+### 9.3 A real bug that WAS found and fixed along the way (unrelated to the main mystery,
+### but a genuine trap)
+Toggling `UIDocument.enabled = false; UIDocument.enabled = true;` (a commonly-suggested
+"force re-registration against EventSystem" trick, meant as a non-obsolete alternative to
+the deprecated `EventSystem.SetUITookitEventSystemOverride()` API) **poisons the panel's
+Yoga layout tree permanently** on-device: every element under the recreated root reports
+`NaN` for `.layout` and `.worldBound` forever afterward, while the original
+pre-toggle panel root stays valid. Visually the panel still renders (a stale GPU snapshot
+survives), which makes this exceptionally easy to miss — it looks like everything's fine
+until you specifically query `.worldBound` in code. **Do not use this re-enable trick.**
+If runtime re-registration is ever genuinely needed, find another mechanism.
+
+### 9.4 Diagnostic technique that worked well — reuse it
+Building small standalone C# diagnostic scripts, run through Unity's Editor scripting
+console/RunCommand tooling (or equivalent), that directly call `panel.Pick()`,
+`PanelRaycaster.Raycast()`, and `EventSystem.RaycastAll()` at a known coordinate and log
+the results, proved far more informative than guessing from symptoms. Also useful:
+enumerating `InputSystem.devices` and hooking `InputSystem.onEvent` globally to confirm
+raw touch events ARE reaching Unity's input layer at all (they were, in every test run —
+the failure is genuinely downstream of raw input arriving).
+
+### 9.5 Package compatibility trap (unrelated to the input bug, but will bite immediately)
+Unity UI Extensions (`Unity-UI-Extensions/com.unity.uiextensions`), a common free add-on
+package, does NOT compile against Unity 6000.6's uGUI on its latest tagged release
+(v3.0.0) — its `UIPrimitiveBase` doesn't implement the newer `ILayoutElement.maxWidth`/
+`maxHeight` interface members Unity added. There is no newer tag to pin to; this is a
+genuine, currently-unresolved upstream incompatibility as of this writing. If a rebuild
+needs anything from that package, either vendor a patched copy or find an alternative —
+don't assume "just pin an older/newer version" will fix it.
+
+### 9.6 Recommended free packages that WERE successfully verified compatible and useful
+(all confirmed working on Unity 6000.6.0f1, Android/IL2CPP, at time of writing):
+- `com.convalise.unity-material-symbols` — Material Symbols icon font wrapper. Ships as
+  a uGUI `Text` subclass in this exact package version; a UI Toolkit rebuild should still
+  use the underlying font asset (`MaterialSymbols-Standard.ttf` /
+  `MaterialSymbols-Filled.ttf`, both bundled in the package under `Fonts/`) directly as a
+  UI Toolkit custom font/icon-font — the codepoints file (`Fonts/codepoints`, plain text,
+  `<icon_name> <hex_codepoint>` per line, some names have multiple valid legacy-alias
+  codepoints) is reusable regardless of which UI framework renders the glyph.
+- `com.kyrylokuzyk.primetween` — lightweight tweening, installed and confirmed to resolve
+  cleanly; UI Toolkit's own USS transitions may cover most needs without it, but it's
+  there if procedural animation is still needed (e.g. the countdown flash).
+- Free icon-set alternatives evaluated but NOT adopted (Material Symbols won instead):
+  Phosphor Icons, Lucide, Tabler Icons — all MIT-licensed, all fine choices if a different
+  visual language is wanted, but have no ready-made Unity package; would need manual
+  SVG/font import.
+
+### 9.7 Build/test toolchain notes (reusable regardless of UI framework)
+The Unity Editor's live scripting/MCP-style bridge tooling used during this project's
+interactive debugging proved unreliable mid-session (dropped connection, required a full
+new session to reliably reconnect). The fallback that worked robustly: a small
+Editor-only static method (`BuildAndroidDevelopment()` in this project's
+`CliBuildTools.cs`, under the Editor-only asmdef) invoked headlessly via
+`Unity.exe -batchmode -quit -nographics -projectPath <path> -buildTarget Android
+-executeMethod <Namespace>.CliBuildTools.BuildAndroidDevelopment -logFile <path>`. This
+requires the interactive Editor GUI to be closed first (a second Unity instance can't
+open a project another instance already holds the lock on). Paired with `adb install -r`,
+`adb shell monkey -p <package> -c android.intent.category.LAUNCHER 1` to launch, and
+`adb shell input swipe x y x y <ms>` for reliable (non-instant) simulated taps, this gave
+a fully scriptable build→install→test loop independent of any Editor-side tooling
+flakiness. Recommended to set up early in a rebuild rather than relying solely on
+interactive Editor testing.
+
+═══════════════════════════════════════════════════════════════════════════
+## 10. OPEN ITEMS / NOT YET DONE AS OF THIS DOCUMENT
+═══════════════════════════════════════════════════════════════════════════
+
+- Motion/animation polish (§5.8) — designed for, not implemented in the uGUI pass.
+- `RecordUiState` enum's full value set wasn't exhaustively captured (§6) — re-read
+  `CamLinkSessionController.cs` directly before relying on it.
+- The vendored rounded-corners shader and Coffee UIEffect overlap in places and haven't
+  been consolidated to one or the other.
+- PrimeTween is installed but unused — no animation currently actually uses it.

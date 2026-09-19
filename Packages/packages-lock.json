@@ -18,12 +18,28 @@
       },
       "url": "https://package.openupm.com"
     },
+    "com.convalise.unity-material-symbols": {
+      "version": "https://github.com/convalise/unity-material-symbols.git?path=/src/UnityMaterialSymbols/Assets/MaterialSymbols",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.ugui": "1.0.0"
+      },
+      "hash": "4c020b16fa36d9c7bd62d31e229c705c2ff0fe1f"
+    },
     "com.gilzoide.flex-ui": {
       "version": "1.2.4",
       "depth": 0,
       "source": "registry",
       "dependencies": {},
       "url": "https://package.openupm.com"
+    },
+    "com.kyrylokuzyk.primetween": {
+      "version": "1.4.11",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://registry.npmjs.org"
     },
     "com.unity.2d.sprite": {
       "version": "1.0.0",

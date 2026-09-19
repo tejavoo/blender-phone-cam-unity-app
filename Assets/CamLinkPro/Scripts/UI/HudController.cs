@@ -4,6 +4,9 @@ using CamLinkPro.Networking;
 using CamLinkPro.Pairing;
 using CamLinkPro.Pipeline;
 using Coffee.UIEffects;
+using com.convalise.UnityMaterialSymbols;
+using Gilzoide.FlexUi;
+using Gilzoide.FlexUi.Yoga;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -62,6 +65,10 @@ namespace CamLinkPro.UI
         static readonly Color CardBg = new Color(0.078f, 0.090f, 0.110f, 0.97f);
         static readonly Color ButtonBg = new Color(0.114f, 0.129f, 0.161f, 0.97f);
         static readonly Color ButtonPressed = new Color(0.29f, 0.565f, 1f, 1f);
+        // Same value as ButtonPressed -- separate name for solid accent-blue
+        // CTA buttons (mockup's Scan QR / Let's Record / Record), which are
+        // that color at rest, not just while pressed.
+        static readonly Color AccentBg = new Color(0.29f, 0.565f, 1f, 1f);
         static readonly Color ButtonDisabled = new Color(0.114f, 0.129f, 0.161f, 0.5f);
         static readonly Color ButtonActiveBg = new Color(0.29f, 0.565f, 1f, 0.9f);
         static readonly Color DangerBg = new Color(0.478f, 0.161f, 0.176f, 0.95f);
@@ -71,10 +78,15 @@ namespace CamLinkPro.UI
         static readonly Color ChipRed = new Color(0.898f, 0.282f, 0.302f, 1f);
 
 
+        // See the long comment in BuildLandingPanel() before flipping this.
+        const bool UiToolkitMigrationEnabled = false;
+
         // -- screens --
         GameObject landingPanel;
         GameObject hudPanel;      // "Recording"
         GameObject settingsPanel;
+        GameObject settingsGeneralTab, settingsCalibrationTab, settingsAppTab, settingsConnectionTab, settingsCameraTab;
+        Button settingsGeneralTabButton, settingsCalibrationTabButton, settingsAppTabButton, settingsConnectionTabButton, settingsCameraTabButton;
         GameObject calibrationPanel; // ROP/ROR per-axis, reachable from Settings
         GameObject scanScreenPanel;
         GameObject qrTimeoutOverlay;
@@ -92,7 +104,13 @@ namespace CamLinkPro.UI
 
         GameObject screenBeforeSettings;
 
-        Text startingCameraChecklistText;
+        GameObject startingCameraBatteryRow;
+        MaterialSymbol startingCameraBatteryIcon;
+        Text startingCameraBatteryLabel;
+        GameObject startingCameraTrackingRow;
+        MaterialSymbol startingCameraTrackingIcon;
+        Text startingCameraTrackingLabel;
+        Image startingCameraSpinner;
         float arWarmupStartedAt;
         const float ArWarmupMaxSeconds = 4f;
 
@@ -136,6 +154,7 @@ namespace CamLinkPro.UI
         Image connectionChip;
         Text connectionStateText;
         Text connectionLatencyText;
+        GameObject terminalReadoutBox;
         Text calibrationBadge;
         GameObject blenderStatusRow;
         Image blenderLiveChip;
@@ -151,6 +170,7 @@ namespace CamLinkPro.UI
         Toggle freezeAxisRowVisibilityToggle;
         Toggle bottomBarVisibilityToggle;
         Toggle recordReadinessWarningVisibilityToggle;
+        Toggle terminalReadoutVisibilityToggle;
 
         Text confirmDialogText;
         System.Action confirmDialogAction;
@@ -173,8 +193,10 @@ namespace CamLinkPro.UI
         Toggle bigZoomVisibilityToggle;
         InputField zoomSensitivityField;
         Text liveCameraReadoutText;
-        Text positionOffsetText;
-        Text rotationOffsetText;
+        Text focalLengthReadoutText, sensorWidthReadoutText;
+        readonly Text[] positionOffsetAxisTexts = new Text[3];
+        readonly Text[] rotationOffsetAxisTexts = new Text[3];
+        readonly Text[] settingsRotationOffsetLabels = new Text[3];
         readonly InputField[] posOffsetFields = new InputField[3];
         readonly InputField[] rotOffsetFields = new InputField[3];
         InputField settingsIpField, settingsPoseField, settingsVideoField, settingsTokenField;
@@ -281,7 +303,12 @@ namespace CamLinkPro.UI
             RefreshWifiWarning();
             DriveBigZoomSlider();
             RefreshLiveCameraReadout();
-            if (startingCameraPanel != null && startingCameraPanel.activeSelf) RefreshArWarmup();
+            if (startingCameraPanel != null && startingCameraPanel.activeSelf)
+            {
+                RefreshArWarmup();
+                if (startingCameraSpinner != null)
+                    startingCameraSpinner.rectTransform.Rotate(0f, 0f, -270f * Time.unscaledDeltaTime);
+            }
             if (savedToastHideAtUnscaled >= 0f && Time.unscaledTime >= savedToastHideAtUnscaled)
             {
                 savedToastPanel.SetActive(false);
@@ -368,6 +395,7 @@ namespace CamLinkPro.UI
             if (rigRow != null) rigRow.SetActive(AppPreferences.RigPresetRowVisible);
             if (freezeRow != null) freezeRow.SetActive(AppPreferences.FreezeAxisRowVisible);
             if (bottomBar != null) bottomBar.SetActive(AppPreferences.BottomControlBarVisible);
+            if (terminalReadoutBox != null) terminalReadoutBox.SetActive(AppPreferences.TerminalReadoutVisible);
         }
 
         /// <summary>Read-only readout of the two Blender-camera values already
@@ -377,9 +405,12 @@ namespace CamLinkPro.UI
         void RefreshLiveCameraReadout()
         {
             if (liveCameraReadoutText == null || controller == null || !settingsPanel.activeSelf) return;
-            liveCameraReadoutText.text = controller.HasRawPose && controller.PoseSource != null
-                ? $"{controller.Zoom.Resolve(controller.PoseSource.LiveFocalLengthMm):0.#}mm / {AR.ZoomState.SensorWidthMm:0.#}mm"
-                : "-- (no live pose yet)";
+            bool live = controller.HasRawPose && controller.PoseSource != null;
+            liveCameraReadoutText.text = live ? "Live" : "-- (no live pose yet)";
+            focalLengthReadoutText.text = live
+                ? $"{controller.Zoom.Resolve(controller.PoseSource.LiveFocalLengthMm):0.0}"
+                : "--";
+            sensorWidthReadoutText.text = live ? $"{AR.ZoomState.SensorWidthMm:0.0}" : "--";
         }
 
         void ShowScreen(GameObject screen)
@@ -391,13 +422,17 @@ namespace CamLinkPro.UI
             scanScreenPanel.SetActive(screen == scanScreenPanel);
             if (startingCameraPanel != null) startingCameraPanel.SetActive(screen == startingCameraPanel);
             if (storageFullPanel != null) storageFullPanel.SetActive(screen == storageFullPanel);
-            // Parked -- see the UiToolkitMigrationEnabled note in
-            // BuildLandingPanel(). Kept permanently inactive until the
-            // runtime-panel input issue is actually resolved.
-            if (uiToolkitLandingRoot != null) uiToolkitLandingRoot.SetActive(false);
-            // The always-on pose readout only matters once you're actually
-            // shooting -- keep it off the other screens to reduce clutter.
-            if (debugOverlayRoot != null) debugOverlayRoot.SetActive(screen == hudPanel);
+            // See the UiToolkitMigrationEnabled note in BuildLandingPanel();
+            // kept inactive (flag false) until the runtime-panel input
+            // issue is confirmed resolved on-device.
+            if (uiToolkitLandingRoot != null)
+                uiToolkitLandingRoot.SetActive(UiToolkitMigrationEnabled && screen == landingPanel);
+            // Dev-only pose readout -- gated by the Settings > Diagnostics
+            // Overlay toggle (AppPreferences.DiagnosticsOverlayEnabled), not
+            // just "on the HUD screen": it was previously showing for every
+            // user regardless of that toggle, bleeding green debug text over
+            // the top bar on every Recording screen visit.
+            if (debugOverlayRoot != null) debugOverlayRoot.SetActive(screen == hudPanel && AppPreferences.DiagnosticsOverlayEnabled);
             if (screen == hudPanel)
             {
                 RefreshZoomControlMode();
@@ -487,8 +522,12 @@ namespace CamLinkPro.UI
             rt.anchorMin = new Vector2(0, 1);
             rt.anchorMax = new Vector2(0, 1);
             rt.pivot = new Vector2(0, 1);
-            rt.anchoredPosition = new Vector2(10, -10);
-            rt.sizeDelta = new Vector2(560, 190);
+            // Below the TopBar's left-clustered nav/rig/freeze rows (~240px
+            // tall), not overlapping them -- this only ever shows when the
+            // Settings > Diagnostics Overlay toggle is on, but it used to
+            // sit right at the top-left corner and bleed over that cluster.
+            rt.anchoredPosition = new Vector2(10, -250);
+            rt.sizeDelta = new Vector2(480, 170);
             debugOverlayRoot.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.55f);
 
             var textGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
@@ -556,13 +595,24 @@ namespace CamLinkPro.UI
             // click, nothing, even on a full-screen catch-all handler.
             // EnhancedTouchSupport.Enable() and the documented (if obsolete)
             // EventSystem.SetUITookitEventSystemOverride() override both
-            // failed to fix it; the actual root cause needs Unity-support-
-            // level investigation, not more guessing. Until it's solved,
-            // UiToolkitMigrationEnabled stays false so this uGUI screen --
-            // which works -- keeps running the real Landing UI. The new
-            // GameObject (LandingUITK) is left in the scene, inactive, so
-            // the next session can pick this up without rebuilding it.
-            const bool UiToolkitMigrationEnabled = false;
+            // failed to fix it.
+            //
+            // Two more candidate fixes have since been added but NOT yet
+            // confirmed working on-device (no way to test them from here):
+            //   1. LandingPanelSettings' scale mode was Constant Physical
+            //      Size (DPI-driven) -- switched to Scale With Screen Size,
+            //      since bogus/zero DPI reporting is a known source of a
+            //      panel that renders fine but never hit-tests.
+            //   2. LandingScreenUITK now toggles UIDocument.enabled off/on
+            //      one frame after activating (see
+            //      ReconnectToEventSystemNextFrame), the supported
+            //      non-obsolete way to force it to re-register its runtime
+            //      panel against EventSystem.current.
+            // To try them: flip this to true, deploy, and watch Console for
+            // "CamLinkPro-UITK: PointerDownEvent" on tap. If taps still
+            // don't land, flip back to false -- this uGUI screen (now
+            // restyled to match the mockup directly, see BuildLandingPanel
+            // below) is the real fallback, not a stopgap.
             if (UiToolkitMigrationEnabled)
             {
                 var invisibility = landingPanel.AddComponent<CanvasGroup>();
@@ -593,10 +643,25 @@ namespace CamLinkPro.UI
             var connectedLayout = landingConnectedGroup.AddComponent<VerticalLayoutGroup>();
             connectedLayout.childAlignment = TextAnchor.MiddleCenter;
             connectedLayout.spacing = 12;
+            // A card, matching the mockup's connected-status card, not bare
+            // chip+text floating on the background.
             var statusRow = CreateRow(landingConnectedGroup.transform, "StatusRow");
-            landingConnectionChip = CreateChip(statusRow.transform);
+            var statusRowLayout = statusRow.GetComponent<HorizontalLayoutGroup>();
+            statusRowLayout.padding = new RectOffset(24, 24, 16, 16);
+            statusRowLayout.spacing = 14;
+            var statusRowImg = statusRow.AddComponent<Image>();
+            statusRowImg.color = CardBg;
+            MakeRounded(statusRow, CardCornerRadiusPixels);
+            landingConnectionChip = CreateChip(statusRow.transform, size: 10);
             landingStatusText = CreateLabel(statusRow.transform, "Connected", 20);
-            CreateButton(landingConnectedGroup.transform, "Re-pair", () => controller?.Unpair());
+            // Plain accent-colored link, not a full button box -- matches
+            // the mockup's "Re-pair" text link. Wrapped in CreateColumn, not
+            // a direct child of landingConnectedGroup -- that VerticalLayoutGroup
+            // defaults to childForceExpandWidth=true, which would otherwise
+            // stretch this button's clickable area across the full screen
+            // width even though textLink makes it visually invisible.
+            var repairCol = CreateColumn(landingConnectedGroup.transform, "RepairColumn");
+            CreateButton(repairCol.transform, "Re-pair", () => controller?.Unpair(), textLink: true, width: 120, height: 40, fontSize: 16);
 
             // -- not-connected state: recent connections / scan / manual pairing --
             landingPairingGroup = new GameObject("PairingGroup", typeof(RectTransform));
@@ -616,25 +681,35 @@ namespace CamLinkPro.UI
 
             recentConnectionsRow = CreateRow(landingPairingGroup.transform, "RecentConnectionsRow");
 
-            var modeRow = CreateRow(landingPairingGroup.transform, "ModeRow");
-            CreateButton(modeRow.transform, "Scan QR", OpenQrScan);
-            CreateButton(modeRow.transform, "Enter Manually", () =>
+            // Stacked, not side-by-side -- the mockup treats "Enter Manually"
+            // as a secondary fallback underneath the primary CTA, not a peer
+            // action next to it. Wrapped in CreateColumn so the two buttons
+            // keep their own fixed widths instead of being stretched
+            // edge-to-edge by landingPairingGroup's default
+            // childForceExpandWidth=true (see the Re-pair comment above).
+            var ctaColumn = CreateColumn(landingPairingGroup.transform, "CtaColumn");
+            CreateButton(ctaColumn.transform, "Scan QR", OpenQrScan, primary: true, width: 260, height: 64, fontSize: 20);
+            CreateButton(ctaColumn.transform, "Enter Manually", () =>
             {
                 bool opening = !manualPanel.activeSelf;
                 manualPanel.SetActive(opening);
                 // Opened by hand, not via a QR hand-off -- the "QR scanned"
                 // confirmation from a previous scan shouldn't linger here.
                 if (opening && manualConfirmText != null) manualConfirmText.gameObject.SetActive(false);
-            });
+            }, textLink: true, width: 170, height: 40, fontSize: 16);
 
             BuildManualPanel();
             manualEntry?.Prefill(PairingInfoStore.Load());
             manualPanel.SetActive(false);
 
-            // Always visible on Landing regardless of paired state.
+            // Always visible on Landing regardless of paired state. Let's
+            // Record is the primary CTA (accent blue) once paired -- the
+            // disabled color still takes over automatically while not paired
+            // (ButtonDisabled, via MakeColors), so this only changes how it
+            // looks once it's actually usable.
             var bottomRow = CreateRow(landingPanel.transform, "LandingBottomRow");
-            CreateButton(bottomRow.transform, "Settings", () => OpenSettingsFrom(landingPanel));
-            letsRecordButton = CreateButton(bottomRow.transform, "Let's Record", OpenRecordingHud);
+            CreateButton(bottomRow.transform, "Settings", () => OpenSettingsFrom(landingPanel), width: 150, height: 52, fontSize: 16);
+            letsRecordButton = CreateButton(bottomRow.transform, "Let's Record", OpenRecordingHud, primary: true, width: 190, height: 52, fontSize: 16);
         }
 
         void RefreshLandingConnectionUi(bool paired)
@@ -657,6 +732,7 @@ namespace CamLinkPro.UI
                 // which case we say nothing more than "Connected").
                 string headline;
                 Color chipColor;
+                char? chipSymbol;
                 if (controller.ChannelState == ChannelState.Connected)
                 {
                     headline = controller.BlenderLiveState switch
@@ -666,20 +742,24 @@ namespace CamLinkPro.UI
                         Networking.BlenderLiveState.Connected => $"Connected to {p.Ip} -- Blender not live",
                         _ => $"Connected to {p.Ip}",
                     };
-                    chipColor = controller.BlenderLiveState == Networking.BlenderLiveState.Live ? ChipGreen : ChipYellow;
+                    bool live = controller.BlenderLiveState == Networking.BlenderLiveState.Live;
+                    chipColor = live ? ChipGreen : ChipYellow;
+                    chipSymbol = live ? ChipSymbolGood : ChipSymbolDegraded;
                 }
                 else if (controller.ChannelState == ChannelState.Connecting)
                 {
                     headline = $"Paired to {p.Ip} -- connecting...";
                     chipColor = ChipYellow;
+                    chipSymbol = ChipSymbolDegraded;
                 }
                 else
                 {
                     headline = $"Paired to {p.Ip} -- not reachable";
                     chipColor = ChipRed;
+                    chipSymbol = ChipSymbolLost;
                 }
                 landingStatusText.text = $"{headline}\npose:{p.PosePort}  video/cmd:{p.VideoPort}";
-                if (landingConnectionChip != null) landingConnectionChip.color = chipColor;
+                SetChipState(landingConnectionChip, chipColor, chipSymbol);
             }
 
             if (!paired) RebuildRecentConnectionsRow();
@@ -762,12 +842,35 @@ namespace CamLinkPro.UI
 
             CreateLabel(scanScreenPanel.transform, "Scan QR", 28);
 
+            // Top-right "camera active" pill, matching the mockup -- an
+            // honest heads-up that the physical camera is live right now,
+            // not just a title. Excluded from the VerticalLayoutGroup flow
+            // (ignoreLayout) so it can sit absolutely positioned instead of
+            // as another stacked row.
+            var cameraActivePill = CreatePillRow(scanScreenPanel.transform, "CameraActivePill", spacing: 6f);
+            var cameraActiveLe = cameraActivePill.AddComponent<LayoutElement>();
+            cameraActiveLe.ignoreLayout = true;
+            var cameraActiveRt = cameraActivePill.GetComponent<RectTransform>();
+            cameraActiveRt.anchorMin = cameraActiveRt.anchorMax = new Vector2(1, 1);
+            cameraActiveRt.pivot = new Vector2(1, 1);
+            cameraActiveRt.anchoredPosition = new Vector2(-20, -20);
+            var cameraActiveDot = CreateChip(cameraActivePill.transform, size: 6);
+            cameraActiveDot.color = ChipYellow;
+            var cameraActiveLabel = CreateLabel(cameraActivePill.transform, "CAMERA ACTIVE", 13);
+            cameraActiveLabel.color = ChipYellow;
+
             var previewBox = CreatePanel(scanScreenPanel.transform, "PreviewBox", stretch: false);
             var boxRt = previewBox.GetComponent<RectTransform>();
             boxRt.sizeDelta = new Vector2(800, 800);
             var boxLe = previewBox.AddComponent<LayoutElement>();
             boxLe.preferredWidth = 800;
             boxLe.preferredHeight = 800;
+            // Opt out of scanScreenPanel's default childForceExpandWidth=true --
+            // without this the box (and every corner bracket anchored to its
+            // corners) stretches wider than tall, breaking the square
+            // viewfinder frame.
+            boxLe.flexibleWidth = 0;
+            boxLe.flexibleHeight = 0;
 
             var previewGO = new GameObject("Preview", typeof(RectTransform), typeof(RawImage));
             previewGO.transform.SetParent(previewBox.transform, false);
@@ -778,6 +881,15 @@ namespace CamLinkPro.UI
             previewRt.offsetMax = Vector2.zero;
             var previewImage = previewGO.GetComponent<RawImage>();
             previewImage.color = Color.white;
+
+            // Viewfinder corner brackets, matching the mockup's QR-scan frame
+            // -- added after the RawImage so they draw on top of it, not
+            // underneath (later siblings render on top).
+            const float bracketArm = 42f, bracketThickness = 5f, bracketMargin = 18f;
+            CreateCornerBracket(previewBox.transform, new Vector2(0, 1), bracketArm, bracketThickness, bracketMargin, AccentBg);
+            CreateCornerBracket(previewBox.transform, new Vector2(1, 1), bracketArm, bracketThickness, bracketMargin, AccentBg);
+            CreateCornerBracket(previewBox.transform, new Vector2(0, 0), bracketArm, bracketThickness, bracketMargin, AccentBg);
+            CreateCornerBracket(previewBox.transform, new Vector2(1, 0), bracketArm, bracketThickness, bracketMargin, AccentBg);
 
             if (qrScanner != null)
             {
@@ -859,6 +971,23 @@ namespace CamLinkPro.UI
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.spacing = 14;
 
+            // Warning icon circle, matching the mockup's "!" badge above the
+            // title instead of jumping straight to text.
+            var iconGo = new GameObject("WarningIcon", typeof(RectTransform), typeof(Image));
+            iconGo.transform.SetParent(qrTimeoutOverlay.transform, false);
+            var iconLe = iconGo.AddComponent<LayoutElement>();
+            iconLe.minWidth = iconLe.minHeight = iconLe.preferredWidth = iconLe.preferredHeight = 64;
+            iconLe.flexibleWidth = 0; // opt out of the parent VerticalLayoutGroup's default childForceExpandWidth=true
+            var iconImg = iconGo.GetComponent<Image>();
+            iconImg.color = new Color(ChipYellow.r, ChipYellow.g, ChipYellow.b, 0.16f);
+            MakeRounded(iconGo, RoundedSpriteTextureSize / 2);
+            var iconLabel = CreateMaterialIcon(iconGo.transform, IconWarning, 32, ChipYellow);
+            var iconLabelRt = iconLabel.GetComponent<RectTransform>();
+            iconLabelRt.anchorMin = Vector2.zero;
+            iconLabelRt.anchorMax = Vector2.one;
+            iconLabelRt.offsetMin = Vector2.zero;
+            iconLabelRt.offsetMax = Vector2.zero;
+
             CreateLabel(qrTimeoutOverlay.transform, "Couldn't find a pairing QR code", 24);
             var sub = CreateLabel(qrTimeoutOverlay.transform, "Make sure Blender's Cam Link Pro panel is showing its QR and this phone is on the same Wi-Fi network.", 16);
             sub.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -867,7 +996,7 @@ namespace CamLinkPro.UI
             subLe.preferredWidth = 700;
 
             var row = CreateRow(qrTimeoutOverlay.transform, "QrTimeoutRow");
-            CreateButton(row.transform, "Try Again", OpenQrScan);
+            CreateButton(row.transform, "Try Again", OpenQrScan, primary: true);
             CreateButton(row.transform, "Enter Manually", () =>
             {
                 qrScanner?.Close();
@@ -914,7 +1043,8 @@ namespace CamLinkPro.UI
 
             SetArSessionEnabled(true);
             arWarmupStartedAt = Time.unscaledTime;
-            if (startingCameraChecklistText != null) startingCameraChecklistText.text = "";
+            if (startingCameraBatteryRow != null) startingCameraBatteryRow.SetActive(false);
+            if (startingCameraTrackingRow != null) startingCameraTrackingRow.SetActive(false);
             ShowScreen(startingCameraPanel);
         }
 
@@ -937,13 +1067,18 @@ namespace CamLinkPro.UI
             bool tracking = controller != null && controller.PoseSource != null && controller.PoseSource.TrackingReliable;
             float elapsed = Time.unscaledTime - arWarmupStartedAt;
 
-            if (startingCameraChecklistText != null)
+            if (startingCameraBatteryRow != null && SystemInfo.batteryLevel >= 0f)
             {
-                string batteryLine = SystemInfo.batteryLevel >= 0f
-                    ? $"Battery {SystemInfo.batteryLevel * 100f:0}%"
-                    : null;
-                string trackingLine = tracking ? "AR tracking ready" : "Waiting for AR tracking...";
-                startingCameraChecklistText.text = batteryLine != null ? $"{batteryLine}\n{trackingLine}" : trackingLine;
+                startingCameraBatteryRow.SetActive(true);
+                startingCameraBatteryLabel.text = $"Battery {SystemInfo.batteryLevel * 100f:0}%";
+            }
+            if (startingCameraTrackingRow != null)
+            {
+                startingCameraTrackingRow.SetActive(true);
+                startingCameraTrackingLabel.text = tracking ? "AR tracking ready" : "Waiting for AR tracking...";
+                startingCameraTrackingIcon.code = tracking ? IconCheckCircle : ''; // pending -- schedule/clock icon (verified against font cmap)
+                startingCameraTrackingIcon.color = tracking ? ChipGreen : ChipYellow;
+                startingCameraTrackingLabel.color = tracking ? ChipGreen : ChipYellow;
             }
 
             if (tracking || elapsed >= ArWarmupMaxSeconds) ShowScreen(hudPanel);
@@ -971,7 +1106,7 @@ namespace CamLinkPro.UI
         /// the local RecordUiState machine ever hearing REC_OFF, which would
         /// otherwise leave the HUD quietly claiming "Recording" while nothing
         /// is actually reaching Blender any more. Positioned just below
-        /// TopBar's fixed 200px band, not overlapping its nav/status rows.</summary>
+        /// TopBar's 240px band, not overlapping its nav/rig/freeze rows.</summary>
         void BuildDisconnectBanner()
         {
             disconnectBannerPanel = CreatePanel(hudPanel.transform, "DisconnectBanner", stretch: false);
@@ -979,13 +1114,18 @@ namespace CamLinkPro.UI
             rt.anchorMin = new Vector2(0, 1);
             rt.anchorMax = new Vector2(1, 1);
             rt.pivot = new Vector2(0.5f, 1);
-            rt.anchoredPosition = new Vector2(0, -200);
+            rt.anchoredPosition = new Vector2(0, -240);
             rt.sizeDelta = new Vector2(0, 48);
             var img = disconnectBannerPanel.GetComponent<Image>();
             img.color = new Color(0.35f, 0.08f, 0.08f, 0.92f);
             img.raycastTarget = false;
 
-            disconnectBannerText = CreateLabel(disconnectBannerPanel.transform, "Blender disconnected -- recording may not be saving", 18);
+            var row = CreateRow(disconnectBannerPanel.transform, "DisconnectBannerRow");
+            var rowLayout = row.GetComponent<HorizontalLayoutGroup>();
+            rowLayout.childAlignment = TextAnchor.MiddleCenter;
+            rowLayout.spacing = 8;
+            CreateMaterialIcon(row.transform, IconWarning, 20, ChipYellow);
+            disconnectBannerText = CreateLabel(row.transform, "Blender disconnected -- recording may not be saving", 18);
             disconnectBannerText.color = Color.white;
             disconnectBannerText.raycastTarget = false;
 
@@ -1057,12 +1197,49 @@ namespace CamLinkPro.UI
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.spacing = 14;
 
+            // Spinning accent arc, matching the mockup's loading spinner --
+            // a partial-fill circle (the same rounded-sprite circle used
+            // everywhere else) rotated continuously in Update() while this
+            // panel is active.
+            var spinnerGo = new GameObject("Spinner", typeof(RectTransform), typeof(Image));
+            spinnerGo.transform.SetParent(startingCameraPanel.transform, false);
+            var spinnerLe = spinnerGo.AddComponent<LayoutElement>();
+            spinnerLe.minWidth = spinnerLe.minHeight = spinnerLe.preferredWidth = spinnerLe.preferredHeight = 64;
+            spinnerLe.flexibleWidth = 0; // opt out of the parent VerticalLayoutGroup's default childForceExpandWidth=true
+            startingCameraSpinner = spinnerGo.GetComponent<Image>();
+            startingCameraSpinner.sprite = GetCircleSprite();
+            startingCameraSpinner.type = Image.Type.Filled;
+            startingCameraSpinner.fillMethod = Image.FillMethod.Radial360;
+            startingCameraSpinner.fillAmount = 0.75f;
+            startingCameraSpinner.color = AccentBg;
+            // startingCameraPanel's VerticalLayoutGroup defaults to
+            // childForceExpandWidth=true (stretching every direct child to
+            // the panel's full width) -- preserveAspect keeps this a circle
+            // instead of a squashed-wide ellipse.
+            startingCameraSpinner.preserveAspect = true;
+
             CreateLabel(startingCameraPanel.transform, "Starting camera...", 26);
             CreateLabel(startingCameraPanel.transform, "Initializing AR tracking", 16);
-            startingCameraChecklistText = CreateLabel(startingCameraPanel.transform, "", 16);
-            startingCameraChecklistText.color = ChipGreen;
+
+            var checklistColumn = CreateColumn(startingCameraPanel.transform, "ChecklistColumn");
+            (startingCameraBatteryRow, startingCameraBatteryIcon, startingCameraBatteryLabel) = CreateChecklistRow(checklistColumn.transform);
+            (startingCameraTrackingRow, startingCameraTrackingIcon, startingCameraTrackingLabel) = CreateChecklistRow(checklistColumn.transform);
 
             BuildStorageFullPanel();
+        }
+
+        /// <summary>One row of the "Starting camera..." preflight checklist
+        /// (mockup: "✓ Battery 82%" / "✓ AR tracking ready") -- a
+        /// MaterialSymbol check icon plus a label, so readiness is shown
+        /// with a real icon instead of the plain sentence the checklist
+        /// used to be.</summary>
+        (GameObject row, MaterialSymbol icon, Text label) CreateChecklistRow(Transform parent)
+        {
+            var row = CreateRow(parent, "ChecklistRow");
+            var icon = CreateMaterialIcon(row.transform, IconCheckCircle, 18, ChipGreen);
+            var label = CreateLabel(row.transform, "", 16);
+            label.color = ChipGreen;
+            return (row, icon, label);
         }
 
         /// <summary>Blocks "Let's Record" outright (real check -- see
@@ -1076,6 +1253,23 @@ namespace CamLinkPro.UI
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.spacing = 16;
 
+            // Danger-colored warning icon circle, matching the mockup's "!"
+            // badge above the title instead of jumping straight to text.
+            var iconGo = new GameObject("WarningIcon", typeof(RectTransform), typeof(Image));
+            iconGo.transform.SetParent(storageFullPanel.transform, false);
+            var iconLe = iconGo.AddComponent<LayoutElement>();
+            iconLe.minWidth = iconLe.minHeight = iconLe.preferredWidth = iconLe.preferredHeight = 64;
+            iconLe.flexibleWidth = 0; // opt out of the parent VerticalLayoutGroup's default childForceExpandWidth=true
+            var iconImg = iconGo.GetComponent<Image>();
+            iconImg.color = new Color(DangerBg.r, DangerBg.g, DangerBg.b, 0.22f);
+            MakeRounded(iconGo, RoundedSpriteTextureSize / 2);
+            var iconLabel = CreateMaterialIcon(iconGo.transform, IconWarning, 32, ChipRed);
+            var iconLabelRt = iconLabel.GetComponent<RectTransform>();
+            iconLabelRt.anchorMin = Vector2.zero;
+            iconLabelRt.anchorMax = Vector2.one;
+            iconLabelRt.offsetMin = Vector2.zero;
+            iconLabelRt.offsetMax = Vector2.zero;
+
             CreateLabel(storageFullPanel.transform, "Not enough storage to record", 26);
             storageFullText = CreateLabel(storageFullPanel.transform, "", 16);
             storageFullText.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -1085,6 +1279,20 @@ namespace CamLinkPro.UI
             CreateButton(storageFullPanel.transform, "Dismiss", () => ShowScreen(landingPanel));
         }
 
+        /// <summary>Compact, left-clustered top strip -- rebuilt to match the
+        /// reviewed mockup (claude.ai/artifact/2sDLBzMfR4Hdf16u5V9tmW,
+        /// RecordingIdle) instead of the old auto-flowing, center-aligned
+        /// VerticalLayoutGroup stack, which centered every row in the middle
+        /// of a 1920-wide screen (misaligned rig-preset row), rendered the
+        /// status pills after the Settings button in a HorizontalLayoutGroup
+        /// insertion-order row (instead of between Home and Settings), and
+        /// reserved a flat, fixed 200px opaque band regardless of content.
+        /// Uses Gilzoide.FlexUi.FlexLayout (real CSS-flexbox-style Yoga
+        /// layout) for the three rows that actually need flex behaviour --
+        /// the nav row's space-between (Home / pills / Settings) and the
+        /// rig-preset/freeze-axis pill rows' left-aligned wrapping -- while
+        /// each row's own internal content (buttons, toggles, pill cards)
+        /// stays built from the existing Unity layout-group helpers.</summary>
         void BuildTopBar()
         {
             var topBar = CreatePanel(hudPanel.transform, "TopBar", stretch: false);
@@ -1093,51 +1301,88 @@ namespace CamLinkPro.UI
             rt.anchorMax = new Vector2(1, 1);
             rt.pivot = new Vector2(0.5f, 1);
             rt.anchoredPosition = new Vector2(0, 0);
-            rt.sizeDelta = new Vector2(0, 200);
+            rt.sizeDelta = new Vector2(0, 240);
+            AddEdgeFadeBackground(topBar, fadeFromTop: true);
             var layout = topBar.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(20, 20, 10, 10);
-            layout.spacing = 8;
-            layout.childAlignment = TextAnchor.UpperCenter;
+            layout.padding = new RectOffset(28, 28, 16, 10);
+            layout.spacing = 14;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
 
-            var navRow = CreateRow(topBar.transform, "NavRow");
-            CreateButton(navRow.transform, "< Home", CloseRecordingHud);
-            CreateButton(navRow.transform, "Settings", () => OpenSettingsFrom(hudPanel));
+            // -- Nav row: Home (left) / status pills (center) / Settings
+            // (right) -- Yoga space-between instead of insertion-order flow,
+            // so the pills land between the two nav buttons regardless of
+            // build order.
+            var navRow = CreateFlexRow(topBar.transform, "NavRow", Justify.SpaceBetween, Align.Center);
+            var navRowLe = navRow.gameObject.AddComponent<LayoutElement>();
+            navRowLe.minHeight = navRowLe.preferredHeight = 56;
+
+            var homeBtn = CreateButton(navRow.transform, "< Home", CloseRecordingHud, width: 118, height: 52, fontSize: 16);
+            AsFlexChild(homeBtn);
 
             // Split out from the nav buttons above (which must always stay
             // visible for navigation) so "Status Strip" visibility in
             // Settings -> App only hides the status indicators, never Home/
-            // Settings themselves.
-            statusIndicatorsGroup = CreateRow(navRow.transform, "StatusIndicatorsGroup");
-            connectionChip = CreateChip(statusIndicatorsGroup.transform);
+            // Settings themselves. Both pill rows share one flex-child
+            // wrapper so Yoga treats "the pills" as a single centered block.
+            var statusCluster = CreateRow(navRow.transform, "StatusCluster");
+            AsFlexChild(statusCluster.transform);
+
+            statusIndicatorsGroup = CreatePillRow(statusCluster.transform, "StatusIndicatorsGroup", spacing: 6f);
+            connectionChip = CreateChip(statusIndicatorsGroup.transform, size: 7);
             // Text alongside the chip, not just its color -- a color-only
             // signal reads fine indoors but washes out in bright sunlight,
             // and doesn't distinguish anything for color-vision deficiency.
-            connectionStateText = CreateLabel(statusIndicatorsGroup.transform, "Link: --", 16);
-            connectionLatencyText = CreateLabel(statusIndicatorsGroup.transform, "--", 16);
-            calibrationBadge = CreateLabel(statusIndicatorsGroup.transform, "CAL", 14);
+            connectionStateText = CreateLabel(statusIndicatorsGroup.transform, "Link:", 14);
+            // Terminal-style readout (green monospace-ish on near-black),
+            // matching the mockup's live-telemetry treatment -- gated by
+            // its own HUD Visibility toggle (Settings -> App), same
+            // hide-the-element-only convention as the rest of the strip.
+            (terminalReadoutBox, connectionLatencyText) = CreateInlineTerminalValue(statusIndicatorsGroup.transform, "--", ChipGreen);
+            calibrationBadge = CreateLabel(statusIndicatorsGroup.transform, "CAL", 12);
             calibrationBadge.color = ButtonActiveBg;
             calibrationBadge.gameObject.SetActive(false);
 
             // Blender's own state, learned only from the additive STATE
-            // line -- separate row from NavRow since it's informational,
-            // not navigation. Unknown (dim chip, "--") covers both "just
-            // connected, first STATE line hasn't arrived yet" and "an older
-            // add-on that predates this line" -- deliberately not red,
-            // since neither of those is actually an error.
-            blenderStatusRow = CreateRow(topBar.transform, "BlenderStatusRow");
-            blenderLiveChip = CreateChip(blenderStatusRow.transform);
-            blenderLiveText = CreateLabel(blenderStatusRow.transform, "Blender: --", 16);
-            poseSendingText = CreateLabel(blenderStatusRow.transform, "Pose: --", 16);
+            // line -- its own pill card, next to the link pill, since it's
+            // informational rather than navigation. Unknown (dim chip, "--")
+            // covers both "just connected, first STATE line hasn't arrived
+            // yet" and "an older add-on that predates this line" --
+            // deliberately not red, since neither of those is actually an
+            // error.
+            blenderStatusRow = CreatePillRow(statusCluster.transform, "BlenderStatusRow", spacing: 6f);
+            blenderLiveChip = CreateChip(blenderStatusRow.transform, size: 7);
+            blenderLiveText = CreateLabel(blenderStatusRow.transform, "Blender: --", 14);
+            poseSendingText = CreateLabel(blenderStatusRow.transform, "Pose: --", 14);
 
-            rigRow = CreateRow(topBar.transform, "RigRow");
+            var settingsBtn = CreateButton(navRow.transform, "Settings", () => OpenSettingsFrom(hudPanel), width: 118, height: 52, fontSize: 16);
+            AsFlexChild(settingsBtn);
+
+            // -- Rig-preset pills: small, left-aligned, wrapping row --
+            // previously full-size (140x60) CreateButtons centered in the
+            // middle of the screen by the old VerticalLayoutGroup.
+            var rigFlex = CreateFlexRow(topBar.transform, "RigRow", Justify.FlexStart, Align.Center, gap: 12f);
+            rigRow = rigFlex.gameObject;
+            var rigRowLe = rigRow.AddComponent<LayoutElement>();
+            rigRowLe.minHeight = rigRowLe.preferredHeight = 50;
             var presets = new[] { RigPreset.Handheld, RigPreset.Tripod, RigPreset.Dolly, RigPreset.Crane };
             for (int i = 0; i < presets.Length; i++)
             {
                 var preset = presets[i];
-                rigButtons[i] = CreateButton(rigRow.transform, preset.ToString(), () => ApplyPreset(preset));
+                rigButtons[i] = CreateButton(rigRow.transform, preset.ToString(), () => ApplyPreset(preset), width: 126, height: 50, fontSize: 15);
+                AsFlexChild(rigButtons[i]);
             }
 
-            freezeRow = CreateRow(topBar.transform, "FreezeRow");
+            // -- Freeze-axis pills: compact toggle chips (no separate
+            // checkbox+caption -- the pill itself highlights when armed),
+            // left-aligned under the rig row, matching the mockup's small
+            // "Pan-Y / Tilt-X / Roll-Z" strip instead of the old full-size
+            // toggle-with-label-underneath control.
+            var freezeFlex = CreateFlexRow(topBar.transform, "FreezeRow", Justify.FlexStart, Align.Center, gap: 10f);
+            freezeRow = freezeFlex.gameObject;
+            var freezeRowLe = freezeRow.AddComponent<LayoutElement>();
+            freezeRowLe.minHeight = freezeRowLe.preferredHeight = 44;
             // Labelled with the underlying wire rotation channel too (which of
             // rot_x/y/z carries Tilt/Roll/Pan) -- placeholder text here, kept
             // truthful afterwards by RefreshRotationAxisLabels() since which
@@ -1146,7 +1391,9 @@ namespace CamLinkPro.UI
             for (int i = 0; i < 6; i++)
             {
                 int idx = i;
-                freezeToggles[i] = CreateToggle(freezeRow.transform, freezeLabels[i], v => OnFreezeToggle(idx, v));
+                freezeToggles[i] = CreateToggle(freezeRow.transform, freezeLabels[i], v => OnFreezeToggle(idx, v),
+                    width: 76, height: 40, fontSize: 13, labelBelow: false);
+                AsFlexChild(freezeToggles[i]);
             }
             // Order matches freezeToggles[3,4,5]: Pan, Tilt, Roll.
             freezeRotationLabels[0] = freezeToggles[3].GetComponentInChildren<Text>();
@@ -1157,12 +1404,17 @@ namespace CamLinkPro.UI
         void RefreshConnectionChip(ChannelState state)
         {
             if (connectionChip == null) return;
-            connectionChip.color = state switch
+            SetChipState(connectionChip, state switch
             {
                 ChannelState.Connected => ChipGreen,
                 ChannelState.Connecting => ChipYellow,
                 _ => ChipRed,
-            };
+            }, state switch
+            {
+                ChannelState.Connected => ChipSymbolGood,
+                ChannelState.Connecting => ChipSymbolDegraded,
+                _ => ChipSymbolLost,
+            });
             if (connectionStateText != null) connectionStateText.text = state switch
             {
                 ChannelState.Connected => "Link: Connected",
@@ -1174,13 +1426,19 @@ namespace CamLinkPro.UI
 
         void RefreshBlenderLiveChip(BlenderLiveState state)
         {
-            if (blenderLiveChip != null) blenderLiveChip.color = state switch
+            if (blenderLiveChip != null) SetChipState(blenderLiveChip, state switch
             {
                 BlenderLiveState.Live => ChipGreen,
                 BlenderLiveState.LiveNoData => ChipYellow,
                 BlenderLiveState.Connected => ChipYellow,
                 _ => ButtonBg, // Unknown: no info yet, not an error -- avoid a false-alarm red
-            };
+            }, state switch
+            {
+                BlenderLiveState.Live => ChipSymbolGood,
+                BlenderLiveState.LiveNoData => ChipSymbolDegraded,
+                BlenderLiveState.Connected => ChipSymbolDegraded,
+                _ => (char?)null, // Unknown: no info yet -- no symbol, matches "not an error" intent above
+            });
             if (blenderLiveText != null) blenderLiveText.text = state switch
             {
                 BlenderLiveState.Live => "Blender: Live",
@@ -1237,17 +1495,22 @@ namespace CamLinkPro.UI
             // abundant width instead of stacking every control into one tall
             // column that runs off the bottom of a short screen -- that's
             // exactly what was happening before (ROP/ROR and part of Dolly were
-            // rendering below the visible screen entirely).
+            // rendering below the visible screen entirely). Full width now --
+            // RecordPanel/BigZoomSlider moved to the top-right (matching the
+            // mockup's top:100px record card) so they no longer compete with
+            // the bottom bar's right edge; the old 0.82-width anchor was
+            // reserving dead space that's no longer needed.
             bottomBar = CreatePanel(hudPanel.transform, "BottomBar", stretch: false);
             var rt = bottomBar.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0, 0);
-            rt.anchorMax = new Vector2(0.82f, 0); // leaves the right ~18% clear of RecordPanel's column
+            rt.anchorMax = new Vector2(1, 0);
             rt.pivot = new Vector2(0.5f, 0);
-            rt.anchoredPosition = new Vector2(0, 10);
-            rt.sizeDelta = new Vector2(0, 230);
+            rt.anchoredPosition = new Vector2(0, 0);
+            rt.sizeDelta = new Vector2(0, 200);
+            AddEdgeFadeBackground(bottomBar, fadeFromTop: false);
             var rowLayout = bottomBar.AddComponent<HorizontalLayoutGroup>();
-            rowLayout.padding = new RectOffset(20, 20, 12, 12);
-            rowLayout.spacing = 20;
+            rowLayout.padding = new RectOffset(28, 28, 14, 20);
+            rowLayout.spacing = 24;
             rowLayout.childAlignment = TextAnchor.UpperCenter;
             rowLayout.childForceExpandWidth = true;
             rowLayout.childForceExpandHeight = false;
@@ -1314,27 +1577,38 @@ namespace CamLinkPro.UI
             if (useSlider && controller != null) zoomSlider.SetValueWithoutNotify(controller.Zoom.ManualFocalLengthMm);
         }
 
+        /// <summary>Compact status/record card, top-right -- matches the
+        /// mockup's ~148px-wide record panel sitting just under the top bar,
+        /// instead of the old 260x350 card vertically centered on screen
+        /// (which is what made it read as "floating with excess margins,"
+        /// far from everything else in the HUD).</summary>
         void BuildRecordControls()
         {
             var panel = CreatePanel(hudPanel.transform, "RecordPanel", stretch: false);
             var rt = panel.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(1, 0.5f);
-            rt.anchorMax = new Vector2(1, 0.5f);
-            rt.pivot = new Vector2(1, 0.5f);
-            rt.anchoredPosition = new Vector2(-30, 0);
-            rt.sizeDelta = new Vector2(260, 350);
+            rt.anchorMin = new Vector2(1, 1);
+            rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(1, 1);
+            rt.anchoredPosition = new Vector2(-24, -256);
+            rt.sizeDelta = new Vector2(300, 0);
+            AddSoftShadow(panel);
             var layout = panel.AddComponent<VerticalLayoutGroup>();
             layout.spacing = 10;
-            layout.padding = new RectOffset(15, 15, 15, 15);
-            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.padding = new RectOffset(18, 18, 16, 16);
+            layout.childAlignment = TextAnchor.UpperCenter;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            var fitter = panel.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            recordStatusText = CreateLabel(panel.transform, "Idle", 24);
-            lockStartButton = CreateButton(panel.transform, "Lock Start", () => controller?.LockStart());
-            cancelButton = CreateButton(panel.transform, "Cancel", () => controller?.CancelCurrent());
-            recordButton = CreateButton(panel.transform, "Record", () => controller?.BeginRecordCountdown());
-            stopButton = CreateButton(panel.transform, "Stop", () => controller?.Stop());
+            recordStatusText = CreateLabel(panel.transform, "Idle", 22);
+            CreateDivider(panel.transform);
+            lockStartButton = CreateButton(panel.transform, "Lock Start", () => controller?.LockStart(), width: 264, height: 52, fontSize: 17);
+            cancelButton = CreateButton(panel.transform, "Cancel", () => controller?.CancelCurrent(), width: 264, height: 52, fontSize: 17);
+            recordButton = CreateButton(panel.transform, "Record", () => controller?.BeginRecordCountdown(), width: 264, height: 52, fontSize: 17);
+            stopButton = CreateButton(panel.transform, "Stop", () => controller?.Stop(), width: 264, height: 52, fontSize: 17);
 
-            recordReadinessWarningText = CreateLabel(panel.transform, "Blender not live yet", 14);
+            recordReadinessWarningText = CreateLabel(panel.transform, "Blender not live yet", 13);
             recordReadinessWarningText.color = ChipYellow;
             recordReadinessWarningText.gameObject.SetActive(false);
 
@@ -1347,25 +1621,27 @@ namespace CamLinkPro.UI
         /// sensitivity), release and it snaps back to center. Opt-in via
         /// Settings -> Camera Settings -> Zoom Slider Visibility; the compact
         /// absolute-position slider in the bottom bar's Zoom column is a
-        /// separate, independent control.</summary>
+        /// separate, independent control. Top-anchored directly left of
+        /// RecordPanel and sized to roughly match its card height, instead of
+        /// the old full-screen-height rocker vertically centered on its own.</summary>
         void BuildBigZoomSlider()
         {
             bigZoomSliderRoot = CreatePanel(hudPanel.transform, "BigZoomSliderPanel", stretch: false);
             var rt = bigZoomSliderRoot.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(1, 0.5f);
-            rt.anchorMax = new Vector2(1, 0.5f);
-            rt.pivot = new Vector2(1, 0.5f);
-            rt.anchoredPosition = new Vector2(-310, 0);
-            rt.sizeDelta = new Vector2(100, 480);
+            rt.anchorMin = new Vector2(1, 1);
+            rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(1, 1);
+            rt.anchoredPosition = new Vector2(-336, -256);
+            rt.sizeDelta = new Vector2(90, 320);
             var layout = bigZoomSliderRoot.AddComponent<VerticalLayoutGroup>();
             layout.spacing = 8;
             layout.padding = new RectOffset(8, 8, 14, 14);
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childForceExpandHeight = false;
 
-            CreateLabel(bigZoomSliderRoot.transform, "Zoom", 18);
+            CreateLabel(bigZoomSliderRoot.transform, "Zoom", 16);
             bigZoomSlider = CreateVerticalRockerSlider(bigZoomSliderRoot.transform);
-            bigZoomFocalText = CreateLabel(bigZoomSliderRoot.transform, "auto", 16);
+            bigZoomFocalText = CreateLabel(bigZoomSliderRoot.transform, "auto", 14);
 
             bigZoomSliderRoot.SetActive(false); // RefreshBigZoomSliderVisibility() sets the real state
         }
@@ -1402,6 +1678,7 @@ namespace CamLinkPro.UI
             SetStateToggle(freezeAxisRowVisibilityToggle, AppPreferences.FreezeAxisRowVisible);
             SetStateToggle(bottomBarVisibilityToggle, AppPreferences.BottomControlBarVisible);
             SetStateToggle(recordReadinessWarningVisibilityToggle, AppPreferences.RecordReadinessWarningVisible);
+            SetStateToggle(terminalReadoutVisibilityToggle, AppPreferences.TerminalReadoutVisible);
             if (rotationRemapDropdown != null) rotationRemapDropdown.SetValueWithoutNotify((int)controller.Calibration.RotationRemap);
             RefreshRotationAxisLabels();
             RefreshCalibrationOffsetLabels();
@@ -1415,18 +1692,13 @@ namespace CamLinkPro.UI
 
         void RefreshCalibrationOffsetLabels()
         {
-            if (controller == null || positionOffsetText == null) return;
+            if (controller == null || positionOffsetAxisTexts[0] == null) return;
             var c = controller.Calibration;
-            var (tiltLabel, rollLabel, panLabel) = ComputeRotationAxisLabels();
-            positionOffsetText.text = c.HasPositionOffset
-                ? $"Position zero: ({c.PositionOffset.x:F2}, {c.PositionOffset.y:F2}, {c.PositionOffset.z:F2})"
-                : "Position zero: none";
-            rotationOffsetText.text = c.HasRotationOffset
-                ? $"Rotation zero -- {tiltLabel}:{c.RotationOffsetDeg.x:F1}  {rollLabel}:{c.RotationOffsetDeg.y:F1}  {panLabel}:{c.RotationOffsetDeg.z:F1}"
-                : "Rotation zero: none";
 
             for (int i = 0; i < 3; i++)
             {
+                positionOffsetAxisTexts[i].text = c.PositionOffset[i].ToString("0.000");
+                rotationOffsetAxisTexts[i].text = c.RotationOffsetDeg[i].ToString("0.0") + "°";
                 posOffsetFields[i].SetTextWithoutNotify(c.PositionOffset[i].ToString("0.###"));
                 rotOffsetFields[i].SetTextWithoutNotify(c.RotationOffsetDeg[i].ToString("0.###"));
             }
@@ -1456,6 +1728,9 @@ namespace CamLinkPro.UI
             if (calibRotationLabels[0] != null) calibRotationLabels[0].text = tiltLabel;
             if (calibRotationLabels[1] != null) calibRotationLabels[1].text = rollLabel;
             if (calibRotationLabels[2] != null) calibRotationLabels[2].text = panLabel;
+            if (settingsRotationOffsetLabels[0] != null) settingsRotationOffsetLabels[0].text = tiltLabel;
+            if (settingsRotationOffsetLabels[1] != null) settingsRotationOffsetLabels[1].text = rollLabel;
+            if (settingsRotationOffsetLabels[2] != null) settingsRotationOffsetLabels[2].text = panLabel;
         }
 
         void BuildSettingsPanel()
@@ -1480,6 +1755,18 @@ namespace CamLinkPro.UI
             CreateButton(topRow.transform, "< Back", () => ShowScreen(screenBeforeSettings != null ? screenBeforeSettings : landingPanel));
             CreateLabel(topRow.transform, "Settings", 28);
 
+            // Tab bar -- General / Calibration / App / Connection / Camera,
+            // matching the reviewed mockup's Settings structure (previously
+            // one long flat two-column list with no tabs).
+            var tabRow = CreateRow(settingsPanel.transform, "SettingsTabRow");
+            var tabRowLe = tabRow.AddComponent<LayoutElement>();
+            tabRowLe.minHeight = 48;
+            settingsGeneralTabButton = CreateButton(tabRow.transform, "General", () => ShowSettingsTab(0), width: 110, height: 44, fontSize: 15);
+            settingsCalibrationTabButton = CreateButton(tabRow.transform, "Calibration", () => ShowSettingsTab(1), width: 160, height: 44, fontSize: 15);
+            settingsAppTabButton = CreateButton(tabRow.transform, "App", () => ShowSettingsTab(2), width: 100, height: 44, fontSize: 15);
+            settingsConnectionTabButton = CreateButton(tabRow.transform, "Connection", () => ShowSettingsTab(3), width: 150, height: 44, fontSize: 15);
+            settingsCameraTabButton = CreateButton(tabRow.transform, "Camera", () => ShowSettingsTab(4), width: 130, height: 44, fontSize: 15);
+
             // Everything below scrolls -- a phone screen in landscape is short,
             // and this list only grows over time, so trusting it to always fit
             // unscrolled isn't safe.
@@ -1489,9 +1776,28 @@ namespace CamLinkPro.UI
             scrollLe.flexibleHeight = 1;
             var content = CreateScrollView(scrollGo.transform, "Scroll");
 
-            // Two columns side by side -- uses a landscape phone's abundant
-            // width instead of stacking everything into one tall column.
-            var (leftCol, rightCol) = CreateTwoColumns(content, "Columns");
+            // One column per tab, all siblings in the same scroll Content --
+            // ShowSettingsTab(int) shows exactly one at a time. Single-column
+            // (not the old two-column split) since each tab's content is now
+            // short enough on its own not to need the width.
+            settingsGeneralTab = CreateColumn(content, "GeneralTab");
+            settingsCalibrationTab = CreateColumn(content, "CalibrationTab");
+            settingsAppTab = CreateColumn(content, "AppTab");
+            settingsConnectionTab = CreateColumn(content, "ConnectionTab");
+            settingsCameraTab = CreateColumn(content, "CameraTab");
+            var generalCol = settingsGeneralTab.transform;
+            var leftCol = settingsCalibrationTab.transform;
+            var rightCol = settingsAppTab.transform;
+
+            CreateLabel(generalCol, "General", 20);
+            var fontScaleLabel = CreateLabel(generalCol, $"Text Size -- {AppPreferences.FontScale * 100f:0}%", 16);
+            CreateSlider(generalCol, "", AppPreferences.MinFontScale, AppPreferences.MaxFontScale, AppPreferences.FontScale, v =>
+            {
+                AppPreferences.FontScale = v;
+                fontScaleLabel.text = $"Text Size -- {AppPreferences.FontScale * 100f:0}%";
+                RefreshAllFontSizes();
+            });
+            CreateLabel(generalCol, "Sample text at this size", 16);
 
             CreateLabel(leftCol, "Pose Calibration (gain)", 20);
             CreateAxisRow(leftCol, "Position Scale", posScaleFields, (axis, text) =>
@@ -1544,11 +1850,29 @@ namespace CamLinkPro.UI
             CreateLabel(horizonRow.transform, "Horizon Level (fixes roll instability near 90 deg)", 16);
             horizonLevelToggle = CreateStateToggle(horizonRow.transform, v => controller?.SetLevelHorizon(v));
 
-            CreateLabel(leftCol, "Starting-Point Calibration (offset, ROP/ROR on Recording)", 20);
-            positionOffsetText = CreateLabel(leftCol, "Position zero: none", 16);
-            CreateButton(leftCol, "Re-zero (ROP)", () => { controller?.CapturePositionZero(); RefreshCalibrationOffsetLabels(); });
-            rotationOffsetText = CreateLabel(leftCol, "Rotation zero: none", 16);
-            CreateButton(leftCol, "Re-zero (ROR)", () => { controller?.CaptureRotationZero(); RefreshCalibrationOffsetLabels(); });
+            CreateLabel(leftCol, "Starting-Point Calibration (ROP/ROR on Recording)", 20);
+
+            // Two separate cards, not one merged block -- ROP and ROR are
+            // two independent calibration captures (reviewed mockup note),
+            // and showing them as one combined summary blurred that.
+            var ropRorRow = CreateRow(leftCol, "RopRorRow");
+            var ropCard = CreateCard(ropRorRow.transform, "Reset Origin -- Position (ROP)",
+                "Captured camera position, used as the (0,0,0) origin for this take.");
+            var ropAxesRow = CreateRow(ropCard.transform, "RopAxesRow");
+            string[] posAxisNames = { "X", "Y", "Z" };
+            for (int i = 0; i < 3; i++)
+                (_, positionOffsetAxisTexts[i]) = CreateTerminalValue(ropAxesRow.transform, posAxisNames[i], ChipGreen);
+            CreateButton(ropCard.transform, "Re-zero", () => { controller?.CapturePositionZero(); RefreshCalibrationOffsetLabels(); },
+                textLink: true, width: 90, height: 32, fontSize: 14);
+
+            var rorCard = CreateCard(ropRorRow.transform, "Reset Origin -- Rotation (ROR)",
+                "Captured camera rotation, used as the level/forward reference for this take.");
+            var rorAxesRow = CreateRow(rorCard.transform, "RorAxesRow");
+            for (int i = 0; i < 3; i++)
+                (settingsRotationOffsetLabels[i], rotationOffsetAxisTexts[i]) = CreateTerminalValue(rorAxesRow.transform, "", ChipGreen);
+            CreateButton(rorCard.transform, "Re-zero", () => { controller?.CaptureRotationZero(); RefreshCalibrationOffsetLabels(); },
+                textLink: true, width: 90, height: 32, fontSize: 14);
+
             CreateButton(leftCol, "Customize ROP / ROR per axis ->", OpenCalibrationScreen);
 
             CreateLabel(rightCol, "App", 20);
@@ -1614,8 +1938,17 @@ namespace CamLinkPro.UI
                 RefreshRecordReadinessWarning(controller != null ? controller.BlenderLiveState : BlenderLiveState.Unknown);
             });
 
-            CreateLabel(rightCol, "Camera Settings", 20);
-            var bigZoomVisRow = CreateRow(rightCol, "BigZoomVisibilityRow");
+            var terminalReadoutVisRow = CreateRow(rightCol, "TerminalReadoutVisibilityRow");
+            CreateLabel(terminalReadoutVisRow.transform, "Terminal Readout (link latency)", 16);
+            terminalReadoutVisibilityToggle = CreateStateToggle(terminalReadoutVisRow.transform, v =>
+            {
+                AppPreferences.TerminalReadoutVisible = v;
+                RefreshHudVisibility();
+            });
+
+            var cameraCol = settingsCameraTab.transform;
+            CreateLabel(cameraCol, "Camera Settings", 20);
+            var bigZoomVisRow = CreateRow(cameraCol, "BigZoomVisibilityRow");
             CreateLabel(bigZoomVisRow.transform, "Zoom Slider Visibility (big rocker beside Record)", 16);
             bigZoomVisibilityToggle = CreateStateToggle(bigZoomVisRow.transform, v =>
             {
@@ -1623,7 +1956,7 @@ namespace CamLinkPro.UI
                 RefreshBigZoomSliderVisibility();
             });
 
-            var zoomSensitivityRow = CreateRow(rightCol, "ZoomSensitivityRow");
+            var zoomSensitivityRow = CreateRow(cameraCol, "ZoomSensitivityRow");
             CreateLabel(zoomSensitivityRow.transform, "Zoom Slider Sensitivity (0.25-4x)", 16);
             zoomSensitivityField = CreateInputField(zoomSensitivityRow.transform, "1", narrow: true);
             zoomSensitivityField.onEndEdit.AddListener(text =>
@@ -1632,24 +1965,26 @@ namespace CamLinkPro.UI
                 zoomSensitivityField.SetTextWithoutNotify(AppPreferences.ZoomSliderSensitivity.ToString("0.##"));
             });
 
-            CreateLabel(rightCol, "Blender Camera", 20);
-            var liveCamRow = CreateRow(rightCol, "LiveCameraReadoutRow");
-            CreateLabel(liveCamRow.transform, "Live from Blender (focal length / sensor width)", 14);
-            liveCameraReadoutText = CreateLabel(liveCamRow.transform, "--", 16);
-            liveCameraReadoutText.color = ChipGreen;
+            CreateLabel(cameraCol, "Blender Camera", 20);
+            liveCameraReadoutText = CreateLabel(cameraCol, "-- (no live pose yet)", 14);
+            liveCameraReadoutText.color = new Color(1f, 1f, 1f, 0.6f);
+            var liveCamRow = CreateRow(cameraCol, "LiveCameraReadoutRow");
+            (_, focalLengthReadoutText) = CreateTerminalValue(liveCamRow.transform, "FOCAL LENGTH (MM)", ChipGreen);
+            (_, sensorWidthReadoutText) = CreateTerminalValue(liveCamRow.transform, "SENSOR WIDTH (MM)", ChipGreen);
 
-            CreateLabel(rightCol, "Sensor height, lens distortion profile, stream quality and frame rate -- reserved for when the add-on exposes them. Not wired yet.", 13);
+            CreateLabel(cameraCol, "Sensor height, lens distortion profile, stream quality and frame rate -- reserved for when the add-on exposes them. Not wired yet.", 13);
 
-            CreateLabel(rightCol, "Connection", 20);
-            settingsIpField = CreateInputField(rightCol, "IP address");
-            settingsPoseField = CreateInputField(rightCol, "Pose UDP port");
-            settingsVideoField = CreateInputField(rightCol, "Video/command TCP port");
-            settingsTokenField = CreateInputField(rightCol, "Token");
-            settingsConnectionError = CreateLabel(rightCol, "", 16);
+            var connectionCol = settingsConnectionTab.transform;
+            CreateLabel(connectionCol, "Connection", 20);
+            settingsIpField = CreateInputField(connectionCol, "IP address");
+            settingsPoseField = CreateInputField(connectionCol, "Pose UDP port");
+            settingsVideoField = CreateInputField(connectionCol, "Video/command TCP port");
+            settingsTokenField = CreateInputField(connectionCol, "Token");
+            settingsConnectionError = CreateLabel(connectionCol, "", 16);
             settingsConnectionError.color = new Color(1f, 0.4f, 0.4f, 1f);
             settingsConnectionError.gameObject.SetActive(false);
 
-            var connectionRow = CreateRow(rightCol, "ConnectionRow");
+            var connectionRow = CreateRow(connectionCol, "ConnectionRow");
             CreateButton(connectionRow.transform, "Reconnect", ApplyConnectionEdits);
             CreateButton(connectionRow.transform, "Unpair", () =>
             {
@@ -1660,11 +1995,55 @@ namespace CamLinkPro.UI
                 });
             }, danger: true);
 
-            // Bottom breathing room so the last row isn't flush against the
-            // scroll view's edge.
-            var spacerLe = new GameObject("BottomSpacer", typeof(RectTransform)).AddComponent<LayoutElement>();
-            spacerLe.transform.SetParent(rightCol, false);
-            spacerLe.minHeight = 40;
+            // Bottom breathing room so the last row in each tab isn't flush
+            // against the scroll view's edge.
+            foreach (var col in new[] { generalCol, leftCol, rightCol, cameraCol, connectionCol })
+            {
+                var spacerLe = new GameObject("BottomSpacer", typeof(RectTransform)).AddComponent<LayoutElement>();
+                spacerLe.transform.SetParent(col, false);
+                spacerLe.minHeight = 40;
+            }
+
+            ShowSettingsTab(0);
+        }
+
+        /// <summary>Switches the visible Settings tab (0=General,
+        /// 1=Calibration, 2=App, 3=Connection, 4=Camera) and restyles the
+        /// tab buttons so the active one reads as selected (matches the
+        /// mockup's active-tab treatment).</summary>
+        void ShowSettingsTab(int index)
+        {
+            settingsGeneralTab.SetActive(index == 0);
+            settingsCalibrationTab.SetActive(index == 1);
+            settingsAppTab.SetActive(index == 2);
+            settingsConnectionTab.SetActive(index == 3);
+            settingsCameraTab.SetActive(index == 4);
+
+            SetTabButtonActive(settingsGeneralTabButton, index == 0);
+            SetTabButtonActive(settingsCalibrationTabButton, index == 1);
+            SetTabButtonActive(settingsAppTabButton, index == 2);
+            SetTabButtonActive(settingsConnectionTabButton, index == 3);
+            SetTabButtonActive(settingsCameraTabButton, index == 4);
+        }
+
+        static void SetTabButtonActive(Button button, bool active)
+        {
+            if (button == null) return;
+            // Set via the Button's own ColorBlock (normalColor), not a raw
+            // Image.color assignment -- Selectable re-applies colors.normalColor
+            // on its next state transition (pointer enter/exit, select/
+            // deselect), which would silently stomp a direct Image.color set
+            // the first time the user hovers/taps any button on this screen.
+            Color idle = active ? AccentBg : ButtonBg;
+            button.colors = MakeColors(idle, ButtonPressed);
+            var img = button.GetComponent<Image>();
+            if (img != null) img.color = idle;
+            var label = button.GetComponentInChildren<Text>();
+            if (label != null)
+            {
+                label.fontStyle = active ? FontStyle.Bold : FontStyle.Normal;
+                label.color = active ? Color.white : new Color(1f, 1f, 1f, 0.85f);
+            }
         }
 
         /// <summary>Dedicated screen (reached via a button on Settings) for
@@ -1781,7 +2160,9 @@ namespace CamLinkPro.UI
             bool[] values = { f.PositionX, f.PositionY, f.PositionZ, f.Pan, f.Tilt, f.Roll };
             for (int i = 0; i < 6; i++)
             {
-                if (freezeToggles[i] != null) freezeToggles[i].SetIsOnWithoutNotify(values[i]);
+                if (freezeToggles[i] == null) continue;
+                freezeToggles[i].SetIsOnWithoutNotify(values[i]);
+                SetPillToggleColor(freezeToggles[i], values[i]);
             }
         }
 
@@ -1977,6 +2358,122 @@ namespace CamLinkPro.UI
             effect.shadowBlurIntensity = 0.5f;
         }
 
+        static Sprite topFadeSpriteCache;
+        static Sprite bottomFadeSpriteCache;
+
+        /// <summary>A smooth vertical alpha-gradient sprite (plain
+        /// Image.Type.Simple, not sliced -- it needs to stretch, not tile)
+        /// used behind the HUD's top/bottom bars so they read as a soft
+        /// fade over the AR feed, like the mockup's
+        /// linear-gradient(...,rgba(0,0,0,.55),transparent) bars, instead of
+        /// a flat translucent rectangle with a hard edge.</summary>
+        static Sprite GetEdgeFadeSprite(bool fadeFromTop)
+        {
+            if (fadeFromTop && topFadeSpriteCache != null) return topFadeSpriteCache;
+            if (!fadeFromTop && bottomFadeSpriteCache != null) return bottomFadeSpriteCache;
+
+            const int size = 64;
+            var tex = new Texture2D(1, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+            var pixels = new Color32[size];
+            for (int y = 0; y < size; y++)
+            {
+                // Texture row 0 is the bottom in Unity. fadeFromTop bars
+                // (TopBar) want full alpha at the top edge fading to 0
+                // downward; fadeFromTop == false (BottomBar) is the mirror.
+                float t = y / (float)(size - 1);
+                float alpha = fadeFromTop ? t : 1f - t;
+                alpha = Mathf.Pow(alpha, 1.4f); // slightly faster falloff, matches the mockup's tight fade band
+                pixels[y] = new Color32(0, 0, 0, (byte)(alpha * 255));
+            }
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            var sprite = Sprite.Create(tex, new Rect(0, 0, 1, size), new Vector2(0.5f, 0.5f));
+            if (fadeFromTop) topFadeSpriteCache = sprite; else bottomFadeSpriteCache = sprite;
+            return sprite;
+        }
+
+        static Image AddEdgeFadeBackground(GameObject panel, bool fadeFromTop)
+        {
+            var img = panel.GetComponent<Image>();
+            if (img == null) img = panel.AddComponent<Image>();
+            img.sprite = GetEdgeFadeSprite(fadeFromTop);
+            img.type = Image.Type.Simple;
+            img.color = Color.white; // alpha baked into the texture
+            img.raycastTarget = false;
+            return img;
+        }
+
+        /// <summary>One L-shaped viewfinder corner bracket (two thin bars),
+        /// matching the ScanQR mockup's camera-preview frame. <paramref
+        /// name="corner"/> is which corner of <paramref name="parent"/> to
+        /// anchor to, e.g. (0,1) for top-left.</summary>
+        static void CreateCornerBracket(Transform parent, Vector2 corner, float armLength, float thickness, float margin, Color color)
+        {
+            float signX = corner.x < 0.5f ? 1f : -1f;
+            float signY = corner.y < 0.5f ? 1f : -1f;
+            var offset = new Vector2(signX * margin, signY * margin);
+
+            void MakeBar(Vector2 size)
+            {
+                var go = new GameObject("Bracket", typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(parent, false);
+                var rt = go.GetComponent<RectTransform>();
+                rt.anchorMin = rt.anchorMax = rt.pivot = corner;
+                rt.sizeDelta = size;
+                rt.anchoredPosition = offset;
+                var img = go.GetComponent<Image>();
+                img.color = color;
+                img.raycastTarget = false;
+            }
+            MakeBar(new Vector2(armLength, thickness));
+            MakeBar(new Vector2(thickness, armLength));
+        }
+
+        /// <summary>A thin horizontal divider line, e.g. between the
+        /// RecordPanel's status label and its buttons -- matches the
+        /// mockup's record card, which has a faint separator there.</summary>
+        static void CreateDivider(Transform parent, float thickness = 2f)
+        {
+            var go = new GameObject("Divider", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            go.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.08f);
+            var le = go.AddComponent<LayoutElement>();
+            le.minHeight = thickness;
+            le.preferredHeight = thickness;
+            le.flexibleWidth = 1;
+        }
+
+        /// <summary>A flex-positioned row: its direct children (each also
+        /// needing its own FlexLayout component -- see <see cref="AsFlexChild"/>)
+        /// are laid out by Yoga per <paramref name="justify"/>/<paramref name="align"/>
+        /// instead of Unity's HorizontalLayoutGroup, e.g. for the TopBar's nav
+        /// row (Home / status pills / Settings, space-between) and the
+        /// rig-preset/freeze-axis pill rows (left-aligned, wrapping).</summary>
+        static FlexLayout CreateFlexRow(Transform parent, string name, Justify justify, Align align,
+            Wrap wrap = Wrap.NoWrap, float gap = 10f)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var flex = go.AddComponent<FlexLayout>();
+            flex.FlexDirection = FlexDirection.Row;
+            flex.JustifyContent = justify;
+            flex.AlignItems = align;
+            flex.FlexWrap = wrap;
+            flex.Width = YGValue.Percent(100);
+            flex.GapColumn = gap;
+            flex.GapRow = gap;
+            return flex;
+        }
+
+        /// <summary>Registers an already-built child (a normal Unity-layout
+        /// subtree -- a Button, a Toggle, a small HorizontalLayoutGroup row)
+        /// as a sized leaf node in its ancestor FlexLayout's tree, using that
+        /// child's own existing LayoutElement/preferred-size for measurement
+        /// instead of duplicating its sizing in Yoga terms.</summary>
+        static void AsFlexChild(Component uiElement) => uiElement.gameObject.AddComponent<FlexLayout>();
+
         static GameObject CreateRow(Transform parent, string name)
         {
             var go = new GameObject(name, typeof(RectTransform));
@@ -1992,6 +2489,34 @@ namespace CamLinkPro.UI
             return go;
         }
 
+        /// <summary>CreateRow's vertical counterpart -- a shrink-to-content
+        /// column, immune to an ancestor VerticalLayoutGroup's default
+        /// childForceExpandWidth=true (which otherwise stretches every
+        /// direct child, buttons included, to the full parent width -- fine
+        /// for text labels but visibly wrong for a button, which then
+        /// renders as an edge-to-edge bar instead of the size it was given).</summary>
+        static GameObject CreateColumn(Transform parent, string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var layout = go.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 10;
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+            var fitter = go.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            return go;
+        }
+
+        // Settings -> General -> Text Size registry: every label CreateLabel
+        // builds (which covers button/toggle captions too, since they're
+        // built from it) is tracked here with its ORIGINAL/base size, so
+        // RefreshAllFontSizes() can rescale every already-visible label
+        // live instead of only affecting screens built after the change.
+        static readonly List<(Text text, int baseFontSize, LayoutElement layoutElement, int baseMinHeight)> scalableLabels = new();
+
         static Text CreateLabel(Transform parent, string text, int fontSize)
         {
             var go = new GameObject("Label", typeof(RectTransform), typeof(Text));
@@ -1999,15 +2524,35 @@ namespace CamLinkPro.UI
             var t = go.GetComponent<Text>();
             t.text = text;
             t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            t.fontSize = fontSize;
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleCenter;
             t.horizontalOverflow = HorizontalWrapMode.Overflow;
             t.verticalOverflow = VerticalWrapMode.Overflow;
             var le = go.AddComponent<LayoutElement>();
             le.minWidth = 40;
-            le.minHeight = fontSize + 10;
+            int baseMinHeight = fontSize + 10;
+            scalableLabels.Add((t, fontSize, le, baseMinHeight));
+            ApplyFontScaleTo(t, fontSize, le, baseMinHeight, AppPreferences.FontScale);
             return t;
+        }
+
+        static void ApplyFontScaleTo(Text t, int baseFontSize, LayoutElement le, int baseMinHeight, float scale)
+        {
+            t.fontSize = Mathf.RoundToInt(baseFontSize * scale);
+            le.minHeight = Mathf.RoundToInt(baseMinHeight * scale);
+        }
+
+        /// <summary>Rescales every label built so far to the current
+        /// AppPreferences.FontScale -- called once at startup and again
+        /// live whenever the General tab's Text Size control changes.</summary>
+        static void RefreshAllFontSizes()
+        {
+            float scale = AppPreferences.FontScale;
+            foreach (var (text, baseFontSize, le, baseMinHeight) in scalableLabels)
+            {
+                if (text == null) continue; // pruned lazily -- destroyed labels from a torn-down screen, if any
+                ApplyFontScaleTo(text, baseFontSize, le, baseMinHeight, scale);
+            }
         }
 
         /// <summary>A small heart-shaped icon for the credit line -- drawn as
@@ -2072,17 +2617,203 @@ namespace CamLinkPro.UI
         }
 
         /// <summary>A small circular status dot (connection health chip).</summary>
-        static Image CreateChip(Transform parent)
+        static Image CreateChip(Transform parent, float size = 14)
         {
             var go = new GameObject("ConnectionChip", typeof(RectTransform), typeof(Image));
             go.transform.SetParent(parent, false);
             var le = go.AddComponent<LayoutElement>();
-            le.minWidth = 22;
-            le.minHeight = 22;
+            le.minWidth = size;
+            le.minHeight = size;
             var img = go.GetComponent<Image>();
             img.color = ChipRed;
             MakeRounded(go, RoundedSpriteTextureSize / 2); // full circle
+
+            // Accessibility: status dots must carry a symbol in addition to
+            // hue (reviewed mockup, Round 2 note) -- color alone doesn't
+            // read outdoors in bright sunlight or for colour-vision
+            // deficiency. A plain Unicode glyph (check mark/ballot X) was
+            // tried first, but Unity's built-in LegacyRuntime.ttf has no
+            // symbol/dingbat coverage at all (see CreateHeartImage's note --
+            // the exact same silent-empty-glyph failure would've hit here),
+            // so this uses a MaterialSymbol icon instead, same as every
+            // other icon in this file. Lives as a child so SetChipState can
+            // update color+icon together without changing CreateChip's
+            // Image return type (existing call sites all expect an Image).
+            // At very small chip sizes a flat 0.62 ratio shrinks the icon
+            // into illegibility -- floor it so the symbol stays readable
+            // even on the smallest (7px) HUD chips.
+            float iconSize = Mathf.Max(size * 0.62f, 6f);
+            var symbolIcon = CreateMaterialIcon(go.transform, IconCheckCircle, iconSize, new Color(0.05f, 0.06f, 0.08f, 0.92f));
+            var symbolRect = (RectTransform)symbolIcon.transform;
+            // CreateChip's own GameObject has no LayoutGroup, so the
+            // LayoutElement CreateMaterialIcon set is inert here -- size the
+            // icon directly via sizeDelta instead of relying on a layout
+            // pass that will never happen for this child.
+            symbolRect.anchorMin = symbolRect.anchorMax = new Vector2(0.5f, 0.5f);
+            symbolRect.anchoredPosition = Vector2.zero;
+            symbolRect.sizeDelta = new Vector2(iconSize, iconSize);
+            symbolIcon.gameObject.SetActive(false); // hidden until SetChipState gives it a real code
+
             return img;
+        }
+
+        /// <summary>Sets a status chip's color AND its accessibility icon
+        /// together (check_circle good / priority_high degraded / cancel
+        /// lost -- null hides the icon for a neutral/no-info state) -- see
+        /// the accessibility note in CreateChip. Use this instead of setting
+        /// chip.color directly everywhere a chip represents paired/live
+        /// connection health.</summary>
+        static void SetChipState(Image chip, Color color, char? symbolCode)
+        {
+            if (chip == null) return;
+            chip.color = color;
+            var symbolIcon = chip.transform.GetComponentInChildren<MaterialSymbol>(true);
+            if (symbolIcon == null) return;
+            symbolIcon.gameObject.SetActive(symbolCode.HasValue);
+            if (symbolCode.HasValue) symbolIcon.code = symbolCode.Value;
+        }
+
+        const char ChipSymbolGood = IconCheckCircle;
+        const char ChipSymbolDegraded = '';   // priority_high
+        const char ChipSymbolLost = '';       // cancel
+
+        // Material Symbols codepoints, verified against the bundled
+        // MaterialSymbols-Standard/Filled.ttf's actual cmap (several of
+        // Google's codepoint aliases per icon all resolve to the same
+        // glyph -- these are just the first/primary one for each).
+        const char IconCheckCircle = '';
+        const char IconWarning = '';
+        const char IconError = '';
+
+        /// <summary>Material Symbols icon sized to fill its layout box --
+        /// replaces the hand-drawn "!" / plain-text checkmarks the mockup's
+        /// warning/success icons used to be built from.</summary>
+        static MaterialSymbol CreateMaterialIcon(Transform parent, char code, float size, Color color, bool fill = false)
+        {
+            var go = new GameObject("MaterialIcon", typeof(RectTransform), typeof(MaterialSymbol));
+            go.transform.SetParent(parent, false);
+            var le = go.AddComponent<LayoutElement>();
+            le.minWidth = le.minHeight = le.preferredWidth = le.preferredHeight = size;
+            le.flexibleWidth = 0;
+            var icon = go.GetComponent<MaterialSymbol>();
+            // MaterialSymbol.Start() only applies MiddleCenter alignment/
+            // overflow via its own Init() when base.text is still empty at
+            // that point -- setting .symbol here (which sets base.text
+            // immediately) skips that path, so set them explicitly instead
+            // of relying on Start()'s timing.
+            icon.alignment = TextAnchor.MiddleCenter;
+            icon.horizontalOverflow = HorizontalWrapMode.Overflow;
+            icon.verticalOverflow = VerticalWrapMode.Overflow;
+            icon.supportRichText = false;
+            icon.symbol = new MaterialSymbolData(code, fill);
+            icon.color = color;
+            icon.raycastTarget = false;
+            return icon;
+        }
+
+        /// <summary>Wraps a status row (colored dot + mono-ish label(s)) in a
+        /// small rounded "pill" card background, matching the mockup's
+        /// status pills (background rgba(20,23,28,.75), rounded corners)
+        /// instead of the chip/text floating with no shared backing.</summary>
+        static GameObject CreatePillRow(Transform parent, string name, float spacing = 8f)
+        {
+            var go = CreateRow(parent, name);
+            var layout = go.GetComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(14, 14, 7, 7);
+            layout.spacing = spacing;
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0.078f, 0.090f, 0.110f, 0.75f);
+            MakeRounded(go, 14);
+            return go;
+        }
+
+        static readonly Color TerminalBg = new Color(0.02f, 0.035f, 0.03f, 1f);
+
+        /// <summary>A rounded card with a title and optional description,
+        /// matching the mockup's ROP/ROR "Reset Origin" cards -- a shared
+        /// wrapper so any two-card readout section looks the same.</summary>
+        static GameObject CreateCard(Transform parent, string title, string description)
+        {
+            var card = CreateColumn(parent, "Card");
+            var layout = card.GetComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(20, 20, 16, 16);
+            layout.spacing = 10;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            var img = card.AddComponent<Image>();
+            img.color = CardBg;
+            MakeRounded(card, CardCornerRadiusPixels);
+
+            CreateLabel(card.transform, title, 18);
+            if (!string.IsNullOrEmpty(description))
+            {
+                var desc = CreateLabel(card.transform, description, 13);
+                desc.color = new Color(1f, 1f, 1f, 0.6f);
+                desc.horizontalOverflow = HorizontalWrapMode.Wrap;
+                desc.alignment = TextAnchor.UpperLeft;
+                var descLe = desc.gameObject.AddComponent<LayoutElement>();
+                descLe.preferredWidth = 380;
+            }
+            return card;
+        }
+
+        /// <summary>One "terminal" readout box -- green monospace on
+        /// near-black (red for an error/out-of-range value), matching the
+        /// mockup's live-telemetry treatment. Returns both the axis-label
+        /// Text (some callers need to update it later, e.g. Tilt/Roll/Pan
+        /// naming depends on the Rotation Axis Remap setting) and the value
+        /// Text.</summary>
+        static (Text label, Text value) CreateTerminalValue(Transform parent, string axisLabel, Color valueColor)
+        {
+            var col = CreateColumn(parent, "TerminalValue");
+            var layout = col.GetComponent<VerticalLayoutGroup>();
+            layout.spacing = 4;
+            var label = CreateLabel(col.transform, axisLabel, 12);
+            label.color = new Color(1f, 1f, 1f, 0.55f);
+
+            var box = new GameObject("TerminalBox", typeof(RectTransform), typeof(Image));
+            box.transform.SetParent(col.transform, false);
+            box.GetComponent<Image>().color = TerminalBg;
+            MakeRounded(box, 8);
+            var boxLe = box.AddComponent<LayoutElement>();
+            boxLe.minWidth = 92;
+            boxLe.minHeight = 36;
+            boxLe.flexibleWidth = 0;
+
+            var value = CreateLabel(box.transform, "0.000", 15);
+            value.color = valueColor;
+            value.fontStyle = FontStyle.Bold;
+            var valueRt = value.GetComponent<RectTransform>();
+            valueRt.anchorMin = Vector2.zero;
+            valueRt.anchorMax = Vector2.one;
+            valueRt.offsetMin = Vector2.zero;
+            valueRt.offsetMax = Vector2.zero;
+            return (label, value);
+        }
+
+        /// <summary>A compact terminal-style value box with no axis-label
+        /// heading, for dropping inline into an existing labeled row (e.g.
+        /// "Link: <box>ms</box>") instead of CreateTerminalValue's own
+        /// label+box column.</summary>
+        static (GameObject box, Text value) CreateInlineTerminalValue(Transform parent, string initialText, Color valueColor, float minWidth = 56, int fontSize = 13)
+        {
+            var box = new GameObject("InlineTerminalBox", typeof(RectTransform), typeof(Image));
+            box.transform.SetParent(parent, false);
+            box.GetComponent<Image>().color = TerminalBg;
+            MakeRounded(box, 6);
+            var boxLe = box.AddComponent<LayoutElement>();
+            boxLe.minWidth = minWidth;
+            boxLe.minHeight = fontSize + 12;
+            boxLe.flexibleWidth = 0;
+
+            var value = CreateLabel(box.transform, initialText, fontSize);
+            value.color = valueColor;
+            value.fontStyle = FontStyle.Bold;
+            var valueRt = value.GetComponent<RectTransform>();
+            valueRt.anchorMin = Vector2.zero;
+            valueRt.anchorMax = Vector2.one;
+            valueRt.offsetMin = new Vector2(6, 0);
+            valueRt.offsetMax = new Vector2(-6, 0);
+            return (box, value);
         }
 
         /// <summary>Explicit, clearly-different colours per interaction state so
@@ -2102,26 +2833,40 @@ namespace CamLinkPro.UI
             return c;
         }
 
-        static Button CreateButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick, bool danger = false)
+        /// <summary>primary: solid accent-blue CTA (mockup's Scan QR /
+        /// Let's Record buttons) instead of the flat neutral surface color.
+        /// textLink: no box at all -- transparent background, no rounding/
+        /// shadow, accent-colored label -- for secondary actions the mockup
+        /// draws as plain underlined links (Enter Manually, Re-pair) rather
+        /// than full buttons.</summary>
+        static Button CreateButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick, bool danger = false,
+            float width = 140, float height = 60, int fontSize = 20, bool primary = false, bool textLink = false)
         {
             var go = new GameObject($"Button_{label}", typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
             var img = go.GetComponent<Image>();
-            img.color = danger ? DangerBg : ButtonBg;
+            Color idleColor = textLink ? new Color(0f, 0f, 0f, 0f) : danger ? DangerBg : primary ? AccentBg : ButtonBg;
+            img.color = idleColor;
             var rt = go.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(140, 60);
+            rt.sizeDelta = new Vector2(width, height);
             var le = go.AddComponent<LayoutElement>();
-            le.minWidth = 140;
-            le.minHeight = 60;
+            le.minWidth = width;
+            le.minHeight = height;
 
             var btn = go.GetComponent<Button>();
             btn.targetGraphic = img;
-            btn.colors = MakeColors(danger ? DangerBg : ButtonBg, danger ? DangerPressed : ButtonPressed);
+            Color pressedColor = textLink ? new Color(1f, 1f, 1f, 0.08f) : danger ? DangerPressed : ButtonPressed;
+            btn.colors = MakeColors(idleColor, pressedColor);
             btn.onClick.AddListener(onClick);
-            MakeRounded(go, ButtonCornerRadiusPixels);
-            AddSoftShadow(go);
+            if (!textLink)
+            {
+                MakeRounded(go, ButtonCornerRadiusPixels);
+                AddSoftShadow(go);
+            }
 
-            var labelText = CreateLabel(go.transform, label, 20);
+            var labelText = CreateLabel(go.transform, label, fontSize);
+            if (textLink) labelText.color = AccentBg;
+            else if (primary) labelText.color = Color.white;
             var labelRt = labelText.GetComponent<RectTransform>();
             labelRt.anchorMin = Vector2.zero;
             labelRt.anchorMax = Vector2.one;
@@ -2154,9 +2899,10 @@ namespace CamLinkPro.UI
         /// <summary>A toggle with a fixed, descriptive label beside it (X, Y, Z,
         /// Pan, Tilt, Roll, etc.) -- the label never changes; only the checkmark
         /// state does.</summary>
-        static Toggle CreateToggle(Transform parent, string label, System.Action<bool> onChanged)
+        static Toggle CreateToggle(Transform parent, string label, System.Action<bool> onChanged,
+            float width = 90, float height = 50, int fontSize = 18, bool labelBelow = true)
         {
-            var go = BuildToggleVisual(parent, $"Toggle_{label}", out Image bgImg, out Image checkImg);
+            var go = BuildToggleVisual(parent, $"Toggle_{label}", out Image bgImg, out Image checkImg, width, height);
             var toggle = go.GetComponent<Toggle>();
             toggle.targetGraphic = bgImg;
             toggle.graphic = checkImg;
@@ -2164,12 +2910,40 @@ namespace CamLinkPro.UI
             toggle.isOn = false;
             toggle.onValueChanged.AddListener(v => onChanged(v));
 
-            var labelText = CreateLabel(go.transform, label, 18);
+            var labelText = CreateLabel(go.transform, label, fontSize);
             var labelRt = labelText.GetComponent<RectTransform>();
-            labelRt.anchorMin = new Vector2(0, -0.5f);
-            labelRt.anchorMax = new Vector2(1, 0);
+            if (labelBelow)
+            {
+                labelRt.anchorMin = new Vector2(0, -0.5f);
+                labelRt.anchorMax = new Vector2(1, 0);
+            }
+            else
+            {
+                // Compact "pill chip" style (freeze-axis row): the label sits
+                // centered inside the pill itself instead of hanging below
+                // it -- matches the mockup's small inline toggle chips
+                // rather than a checkbox-with-caption control.
+                labelRt.anchorMin = Vector2.zero;
+                labelRt.anchorMax = Vector2.one;
+                labelRt.offsetMin = Vector2.zero;
+                labelRt.offsetMax = Vector2.zero;
+                checkImg.gameObject.SetActive(false);
+                toggle.graphic = null;
+                toggle.onValueChanged.AddListener(v => SetPillToggleColor(toggle, v));
+            }
 
             return toggle;
+        }
+
+        /// <summary>Recolors a compact "pill chip" toggle (see the
+        /// labelBelow: false branch of <see cref="CreateToggle"/>) to reflect
+        /// its current isOn state -- needed both from its own onValueChanged
+        /// listener and anywhere state is restored via SetIsOnWithoutNotify
+        /// (e.g. <see cref="ApplyPreset"/>), since the "without notify" call
+        /// deliberately skips listeners.</summary>
+        static void SetPillToggleColor(Toggle toggle, bool isOn)
+        {
+            if (toggle.targetGraphic is Image img) img.color = isOn ? ButtonActiveBg : ButtonBg;
         }
 
         /// <summary>A toggle whose own inline text reflects its current state
@@ -2207,13 +2981,14 @@ namespace CamLinkPro.UI
             if (label != null) label.text = value ? "On" : "Off";
         }
 
-        static GameObject BuildToggleVisual(Transform parent, string name, out Image bgImg, out Image checkImg)
+        static GameObject BuildToggleVisual(Transform parent, string name, out Image bgImg, out Image checkImg,
+            float width = 90, float height = 50)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Toggle));
             go.transform.SetParent(parent, false);
             var le = go.AddComponent<LayoutElement>();
-            le.minWidth = 90;
-            le.minHeight = 50;
+            le.minWidth = width;
+            le.minHeight = height;
 
             var bgGo = new GameObject("Background", typeof(RectTransform), typeof(Image));
             bgGo.transform.SetParent(go.transform, false);

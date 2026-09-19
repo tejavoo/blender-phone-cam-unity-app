@@ -1,7 +1,12 @@
+using System.Collections;
 using System.Collections.Generic;
 using CamLinkPro.App;
 using CamLinkPro.Networking;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.UIElements;
 
 namespace CamLinkPro.UI
@@ -129,6 +134,123 @@ namespace CamLinkPro.UI
             creditHeart.schedule.Execute(PulseHeart).Every(33);
         }
 
+        void OnEnable()
+        {
+            // ReconnectToEventSystemNextFrame() (toggling UIDocument.enabled)
+            // is DISABLED for this test -- on-device diagnostics showed it
+            // poisons the panel's Yoga layout tree: every element under the
+            // recreated root (LandingUITK-container) reports NaN
+            // layout/worldBound forever afterward, while panel.visualTree
+            // itself (created before the toggle) stays valid. That's the
+            // real explanation for "renders fine, never hit-tests" -- not
+            // an EventSystem wiring gap. Testing without it.
+            StartCoroutine(LogPanelStateOnceSettled());
+            InputSystem.onEvent += LogRawPointerEvent;
+        }
+
+        void OnDisable() => InputSystem.onEvent -= LogRawPointerEvent;
+
+        void LogRawPointerEvent(InputEventPtr eventPtr, InputDevice device)
+        {
+            if (!(device is Touchscreen) && !(device is Mouse)) return;
+            if (!eventPtr.IsA<StateEvent>() && !eventPtr.IsA<DeltaStateEvent>()) return;
+            Debug.Log($"CamLinkPro-INPUT: raw event from {device.displayName} ({device.GetType().Name}) type={eventPtr.type}");
+        }
+
+        /// <summary>One-shot dump of the actual on-device panel/screen geometry
+        /// a few frames after this screen becomes active, once layout has
+        /// settled past the NaN-sized first frame -- so we can compare it
+        /// against Screen.width/height/safeArea and catch a coordinate-space
+        /// mismatch (a common real cause of "renders fine, never hit-tests"
+        /// on device even when Editor raycasts succeed).</summary>
+        IEnumerator LogPanelStateOnceSettled()
+        {
+            for (int i = 0; i < 30; i++) yield return null;
+            foreach (var dev in InputSystem.devices)
+                Debug.Log($"CamLinkPro-DEVICE: {dev.displayName} ({dev.GetType().Name}) added={dev.added} enabled={dev.enabled}");
+
+            var es = EventSystem.current;
+            Debug.Log($"CamLinkPro-MODULE: EventSystem.current={(es != null ? es.name : "null")} " +
+                      $"currentInputModule={(es != null && es.currentInputModule != null ? es.currentInputModule.GetType().FullName : "null")}");
+            if (es != null)
+            {
+                var uiModule = es.GetComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+                if (uiModule != null)
+                {
+                    Debug.Log($"CamLinkPro-MODULE: uiModule.enabled={uiModule.enabled} actionsAsset={(uiModule.actionsAsset != null ? uiModule.actionsAsset.name : "null")} " +
+                              $"pointAction={(uiModule.point != null ? uiModule.point.action?.name : "null")} " +
+                              $"leftClickAction={(uiModule.leftClick != null ? uiModule.leftClick.action?.name : "null")}");
+                    if (uiModule.point?.action != null)
+                        Debug.Log($"CamLinkPro-MODULE: point.action.enabled={uiModule.point.action.enabled} bindings={uiModule.point.action.bindings.Count}");
+                    if (uiModule.leftClick?.action != null)
+                        Debug.Log($"CamLinkPro-MODULE: leftClick.action.enabled={uiModule.leftClick.action.enabled} bindings={uiModule.leftClick.action.bindings.Count}");
+                    if (uiModule.actionsAsset != null)
+                        Debug.Log($"CamLinkPro-MODULE: actionsAsset.enabled={uiModule.actionsAsset.enabled}");
+                }
+                else
+                {
+                    Debug.Log("CamLinkPro-MODULE: no InputSystemUIInputModule component found on EventSystem GO");
+                }
+                var raycasters = es.GetComponents<BaseRaycaster>();
+                Debug.Log($"CamLinkPro-MODULE: raycasters on EventSystem GO = {raycasters.Length}");
+            }
+            var allRaycasters = Object.FindObjectsByType<BaseRaycaster>(FindObjectsSortMode.None);
+            foreach (var r in allRaycasters)
+            {
+                Debug.Log($"CamLinkPro-MODULE: scene raycaster {r.GetType().Name} on {r.gameObject.name} enabled={r.enabled} activeInHierarchy={r.gameObject.activeInHierarchy}");
+                if (r.GetType().Name == "PanelRaycaster") cachedPanelRaycaster = r;
+            }
+            Debug.Log($"CamLinkPro-MODULE: cachedPanelRaycaster = {(cachedPanelRaycaster != null ? cachedPanelRaycaster.name : "NULL")}");
+
+            var panel = document != null ? document.rootVisualElement?.panel : null;
+            Debug.Log($"CamLinkPro-GEOM: Screen=({Screen.width}x{Screen.height}) safeArea={Screen.safeArea} " +
+                      $"orientation={Screen.orientation} dpi={Screen.dpi}");
+            if (panel != null)
+                Debug.Log($"CamLinkPro-GEOM: panel.visualTree.layout={panel.visualTree.layout} " +
+                          $"panel.visualTree.worldBound={panel.visualTree.worldBound}");
+
+            // Bisect the ancestor chain from scan-qr-button up to root -- one
+            // of these is the first link where layout/worldBound goes NaN.
+            VisualElement cur = scanQrButton;
+            int depth = 0;
+            while (cur != null && depth < 12)
+            {
+                Debug.Log($"CamLinkPro-GEOM: chain[{depth}] name={cur.name} type={cur.GetType().Name} " +
+                          $"layout={cur.layout} worldBound={cur.worldBound} " +
+                          $"style.scale={cur.resolvedStyle.scale} style.width={cur.resolvedStyle.width} style.height={cur.resolvedStyle.height} " +
+                          $"classes=[{string.Join(",", cur.GetClasses())}]");
+                cur = cur.parent;
+                depth++;
+            }
+
+            // Sanity check: does a plain Label without the .btn transition
+            // classes resolve fine, or is NaN universal past the root?
+            if (creditHeart != null)
+                Debug.Log($"CamLinkPro-GEOM: creditHeart(Label) layout={creditHeart.layout} worldBound={creditHeart.worldBound}");
+        }
+
+        /// <summary>Candidate fix for the runtime-panel input bug described in
+        /// HudController.BuildLandingPanel's UiToolkitMigrationEnabled note:
+        /// taps were silently swallowed even after the documented (if
+        /// obsolete) EventSystem.SetUITookitEventSystemOverride() call.
+        /// This tries the supported, non-obsolete alternative instead --
+        /// toggling UIDocument.enabled forces it to tear down and rebuild
+        /// its runtime-panel registration against EventSystem.current, one
+        /// frame after this GameObject activates (so EventSystem is
+        /// guaranteed alive first). Untested on-device; if taps still don't
+        /// land after this, the uGUI landingPanel remains the real fallback
+        /// -- see UiToolkitMigrationEnabled.</summary>
+        IEnumerator ReconnectToEventSystemNextFrame()
+        {
+            yield return null;
+            if (document != null && EventSystem.current != null)
+            {
+                document.enabled = false;
+                document.enabled = true;
+                Debug.Log("CamLinkPro-UITK: re-enabled UIDocument against EventSystem " + EventSystem.current.name);
+            }
+        }
+
         void PulseHeart()
         {
             float t = Time.realtimeSinceStartup;
@@ -136,8 +258,63 @@ namespace CamLinkPro.UI
             creditHeart.style.scale = new StyleScale(new Scale(new Vector2(s, s)));
         }
 
+        bool wasTouchPressedLastFrame;
+        BaseRaycaster cachedPanelRaycaster;
+
         void Update()
         {
+            // On-device diagnostic: bypass EventSystem/InputModule entirely --
+            // when a raw touch press is detected, convert its position to
+            // panel space ourselves and ask UI Toolkit's own Pick() whether
+            // it finds anything there. If this finds scan-qr-button but no
+            // PointerDownEvent ever fires, the bug is in EventSystem's
+            // dispatch pipeline (module/raycaster wiring), not picking
+            // itself; if Pick() ALSO fails on-device, it's a genuine
+            // picking/coordinate-space bug specific to this platform.
+            // Don't rely on Touchscreen.current -- adb-injected taps arrive
+            // as a distinct "Virtual (FastTouchscreen)" device that may
+            // never become "current". Scan every touchscreen device
+            // directly instead.
+            bool pressed = false;
+            Vector2 screenPos = default;
+            foreach (var dev in InputSystem.devices)
+            {
+                if (dev is Touchscreen tsd && tsd.primaryTouch.press.isPressed)
+                {
+                    pressed = true;
+                    screenPos = tsd.primaryTouch.position.ReadValue();
+                    break;
+                }
+            }
+            if (pressed && !wasTouchPressedLastFrame && document != null)
+            {
+                var panel = document.rootVisualElement?.panel;
+                if (panel != null)
+                {
+                    var panelPos = RuntimePanelUtils.ScreenToPanel(panel, new Vector2(screenPos.x, Screen.height - screenPos.y));
+                    var picked = panel.Pick(panelPos);
+                    Debug.Log($"CamLinkPro-TOUCH: screenPos={screenPos} -> panelPos={panelPos} Pick()={(picked != null ? picked.name : "NOTHING")}");
+                }
+
+                // Exactly mirror what InputSystemUIInputModule does: build a
+                // PointerEventData at this screen position and call the
+                // actual PanelRaycaster.Raycast() the module calls -- not
+                // panel.Pick() -- to see whether THIS specific call path
+                // (as opposed to picking itself) is what's failing on-device.
+                Debug.Log($"CamLinkPro-RAYCAST: cachedPanelRaycaster={(cachedPanelRaycaster != null ? "present" : "NULL")} EventSystem.current={(EventSystem.current != null ? "present" : "NULL")}");
+                if (cachedPanelRaycaster != null && EventSystem.current != null)
+                {
+                    var ped = new PointerEventData(EventSystem.current) { position = screenPos };
+                    var results = new System.Collections.Generic.List<RaycastResult>();
+                    cachedPanelRaycaster.Raycast(ped, results);
+                    Debug.Log($"CamLinkPro-RAYCAST: PanelRaycaster.Raycast at {screenPos} returned {results.Count} hits");
+                    var allResults = new System.Collections.Generic.List<RaycastResult>();
+                    EventSystem.current.RaycastAll(ped, allResults);
+                    Debug.Log($"CamLinkPro-RAYCAST: EventSystem.RaycastAll returned {allResults.Count} hits");
+                }
+            }
+            wasTouchPressedLastFrame = pressed;
+
             if (wifiWarningLabel == null || pairingGroup == null || pairingGroup.ClassListContains("hidden")) return;
             var reachability = Application.internetReachability;
             bool onLan = reachability == NetworkReachability.ReachableViaLocalAreaNetwork;

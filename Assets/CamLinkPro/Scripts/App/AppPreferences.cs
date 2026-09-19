@@ -21,6 +21,8 @@ namespace CamLinkPro.App
         const string FreezeAxisRowVisibleKey = "CamLinkPro.Prefs.FreezeAxisRowVisible";
         const string BottomControlBarVisibleKey = "CamLinkPro.Prefs.BottomControlBarVisible";
         const string RecordReadinessWarningVisibleKey = "CamLinkPro.Prefs.RecordReadinessWarningVisible";
+        const string TerminalReadoutVisibleKey = "CamLinkPro.Prefs.TerminalReadoutVisible";
+        const string FontScaleKey = "CamLinkPro.Prefs.FontScale";
 
         public const float MinRecordCountdownSeconds = 0f;
         public const float MaxRecordCountdownSeconds = 10f;
@@ -29,6 +31,10 @@ namespace CamLinkPro.App
         public const float MinZoomSliderSensitivity = 0.25f;
         public const float MaxZoomSliderSensitivity = 4f;
         const float DefaultZoomSliderSensitivity = 1f;
+
+        public const float MinFontScale = 0.85f;
+        public const float MaxFontScale = 2f;
+        const float DefaultFontScale = 1f;
 
         static bool? diagnosticsOverlayEnabled;
         static bool? keepScreenAwake;
@@ -41,6 +47,8 @@ namespace CamLinkPro.App
         static bool? freezeAxisRowVisible;
         static bool? bottomControlBarVisible;
         static bool? recordReadinessWarningVisible;
+        static bool? terminalReadoutVisible;
+        static float? fontScale;
 
         /// <summary>Verbose pose/XR-subsystem diagnostics to logcat -- off by
         /// default (it's genuinely noisy), but this is exactly what pinned down
@@ -196,6 +204,38 @@ namespace CamLinkPro.App
         {
             get { recordReadinessWarningVisible ??= PlayerPrefs.GetInt(RecordReadinessWarningVisibleKey, 1) != 0; return recordReadinessWarningVisible.Value; }
             set { recordReadinessWarningVisible = value; PlayerPrefs.SetInt(RecordReadinessWarningVisibleKey, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>The Recording HUD's live "terminal" readout (link
+        /// latency, in the green monospace box) -- on by default, same
+        /// hide-the-element-only convention as every other HUD Visibility
+        /// toggle.</summary>
+        public static bool TerminalReadoutVisible
+        {
+            get { terminalReadoutVisible ??= PlayerPrefs.GetInt(TerminalReadoutVisibleKey, 1) != 0; return terminalReadoutVisible.Value; }
+            set { terminalReadoutVisible = value; PlayerPrefs.SetInt(TerminalReadoutVisibleKey, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>App-wide text size multiplier (Settings -> General) --
+        /// 1.0 is the original design size. Applied to every label built via
+        /// HudController.CreateLabel (which covers button/toggle captions
+        /// too, since those are built from it) through a live registry, so
+        /// changing it updates already-visible text immediately instead of
+        /// only affecting screens built after the change.</summary>
+        public static float FontScale
+        {
+            get
+            {
+                fontScale ??= Mathf.Clamp(PlayerPrefs.GetFloat(FontScaleKey, DefaultFontScale), MinFontScale, MaxFontScale);
+                return fontScale.Value;
+            }
+            set
+            {
+                float clamped = Mathf.Clamp(value, MinFontScale, MaxFontScale);
+                fontScale = clamped;
+                PlayerPrefs.SetFloat(FontScaleKey, clamped);
+                PlayerPrefs.Save();
+            }
         }
     }
 }
