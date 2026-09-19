@@ -10,12 +10,18 @@ namespace CamLinkPro.EditorTools
     /// Assistant MCP bridge.</summary>
     public static class CliBuildTools
     {
+        // Fixed name/path, deliberately never varied per-build (date-stamped
+        // or descriptively-named builds just accumulate and make "which one
+        // is current" a guessing game) -- every build here overwrites the
+        // same file, so this path is always the latest one.
+        public const string OutputApkPath = "Builds/Android/CamLinkPro.apk";
+
         public static void BuildAndroidDevelopment()
         {
             var options = new BuildPlayerOptions
             {
                 scenes = new[] { "Assets/CamLinkPro/Scenes/Main.unity" },
-                locationPathName = "Builds/Android/camlinkpro_cli.apk",
+                locationPathName = OutputApkPath,
                 target = BuildTarget.Android,
                 options = BuildOptions.Development | BuildOptions.AllowDebugging,
             };

@@ -37,7 +37,7 @@ ehthumbs.db
 [Tt]humbs.db
 
 # Builds & APKs
-# *.apk
+#*.apk
 *.aab
 *.unitypackage
 .utmp/
