@@ -7,9 +7,9 @@ EditorBuildSettings:
   m_Scenes:
   - enabled: 1
     path: Assets/CamLinkPro/Scenes/Main.unity
-    guid: 1f9f8d9459d124a689e91b3802ec7e73
+    guid: 8ab3ebde89a284f9c834ccb0f739447b
   m_configObjects:
-    UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 0b90b2c6207384fd0971d80c84491472, type: 2}
-    com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: eed80d2efba5f4231a7c1d2c2730447a, type: 2}
-    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: d19b0d16df19c4713bee56774a4ac982, type: 2}
-    com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 2e0d15b65bcd04032928286652d9b15d, type: 2}
+    UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: c09305abe62c24aad9038749d589d1ca, type: 2}
+    com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: 7170defb95dac4cb8abe31ffd71364a9, type: 2}
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 4232eb5a93c4c42ca8acaf10532c4ab1, type: 2}
+  m_UseUCBPForAssetBundles: 0

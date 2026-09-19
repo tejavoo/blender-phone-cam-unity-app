@@ -1,0 +1,10 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="../Theme.uss" />
+    <ui:VisualElement name="StorageFullRoot" class="screen-root" style="align-items: center; justify-content: center; padding: 48px;">
+        <ui:Label text="&#9888;" class="text-display" style="color: rgb(224,100,100); margin-bottom: 20px;" />
+        <ui:Label text="Not enough storage to record" class="text-title" style="margin-bottom: 10px; white-space: normal; -unity-text-align: upper-center;" />
+        <ui:Label text="Free up at least 500 MB on this device, then try again." class="text-subtitle" style="margin-bottom: 20px; white-space: normal; -unity-text-align: upper-center;" />
+        <ui:Label name="FreeSpaceReadout" text="-- MB free" class="terminal-readout terminal-readout--error text-mono" style="margin-bottom: 28px;" />
+        <ui:Button name="DismissButton" text="Dismiss" class="button-secondary text-body" style="width: 220px; -unity-text-align: middle-center;" />
+    </ui:VisualElement>
+</ui:UXML>

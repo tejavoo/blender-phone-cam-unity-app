@@ -1,0 +1,18 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="../Theme.uss" />
+    <ui:VisualElement name="ArPreflightRoot" class="screen-root screen-root--vignette" style="align-items: center; justify-content: center;">
+        <ui:Label name="Spinner" text="&#9696;" class="text-display" style="color: rgb(74,144,255); margin-bottom: 20px;" />
+        <ui:Label text="Starting camera&#8230;" class="text-title" />
+        <ui:Label text="Initializing AR tracking" class="text-subtitle" style="margin-bottom: 28px;" />
+
+        <ui:VisualElement name="BatteryRow" style="flex-direction: row; align-items: center; margin-bottom: 10px; display: none;">
+            <ui:Label name="BatteryIcon" text="&#9679;" class="text-body" style="color: rgb(64,200,130); margin-right: 10px;" />
+            <ui:Label text="Battery" class="text-body" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="TrackingRow" style="flex-direction: row; align-items: center;">
+            <ui:Label name="TrackingIcon" text="&#8987;" class="text-body" style="color: rgb(224,168,62); margin-right: 10px;" />
+            <ui:Label text="AR tracking" class="text-body" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

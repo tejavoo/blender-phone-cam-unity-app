@@ -1,0 +1,137 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="../Theme.uss" />
+    <ui:VisualElement name="SettingsRoot" class="screen-root" style="padding: 40px;">
+
+        <ui:VisualElement style="flex-direction: row; align-items: center; margin-bottom: 24px;">
+            <ui:Button name="BackButton" text="&lt; Back" class="button-text-link text-body" />
+            <ui:Label text="Settings" class="text-title" style="margin-left: 20px;" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="TabBar" style="flex-direction: row; margin-bottom: 20px; flex-wrap: wrap;">
+            <ui:Button name="TabGeneral" text="General" class="chip text-body" />
+            <ui:Button name="TabCalibration" text="Calibration" class="chip text-body" />
+            <ui:Button name="TabApp" text="App" class="chip text-body" />
+            <ui:Button name="TabConnection" text="Connection" class="chip text-body" />
+            <ui:Button name="TabCamera" text="Camera" class="chip text-body" />
+            <ui:Button name="TabDiagnostics" text="Diagnostics" class="chip text-body" />
+        </ui:VisualElement>
+
+        <ui:ScrollView name="TabContent" style="flex-grow: 1;">
+
+            <ui:VisualElement name="PanelGeneral" class="card">
+                <ui:Label text="Text Size" class="text-title" style="margin-bottom: 12px;" />
+                <ui:Slider name="TextSizeSlider" low-value="0.9" high-value="1.1" value="1.0" />
+                <ui:Label name="TextSizeSample" text="Sample text at current size" class="text-body" style="margin-top: 10px; margin-bottom: 20px;" />
+
+                <ui:VisualElement style="flex-direction: row; justify-content: space-between; align-items: center;">
+                    <ui:VisualElement>
+                        <ui:Label text="Bold Text" class="text-body" />
+                        <ui:Label text="Increases weight across the whole app" class="text-micro" />
+                    </ui:VisualElement>
+                    <ui:Toggle name="BoldTextToggle" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement name="PanelCalibration" class="card" style="display: none;">
+                <ui:Label text="Pose Calibration (gain)" class="text-title" style="margin-bottom: 12px;" />
+                <ui:Toggle name="PositionFlipXToggle" label="Position Flip X" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="PositionFlipYToggle" label="Position Flip Y" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="PositionFlipZToggle" label="Position Flip Z" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="RotationFlipXToggle" label="Rotation Flip X (Tilt)" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="RotationFlipYToggle" label="Rotation Flip Y (Roll)" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="RotationFlipZToggle" label="Rotation Flip Z (Pan)" class="text-body" style="margin-bottom: 8px;" />
+                <ui:DropdownField name="RotationRemapDropdown" label="Rotation Axis Remap" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="LevelHorizonToggle" label="Horizon Level" class="text-body" />
+
+                <ui:VisualElement style="flex-direction: row; margin-top: 20px;">
+                    <ui:VisualElement class="card" style="flex-grow: 1; margin-right: 12px; background-color: rgba(255,255,255,0.03);">
+                        <ui:Label text="Reset Origin — Position (ROP)" class="text-body" style="-unity-font-style: bold;" />
+                        <ui:Label text="Captured raw position becomes (0,0,0)" class="text-micro" style="margin-bottom: 10px; white-space: normal;" />
+                        <ui:VisualElement style="flex-direction: row;">
+                            <ui:Label name="RopX" text="0.000" class="terminal-readout text-mono" style="margin-right: 8px;" />
+                            <ui:Label name="RopY" text="0.000" class="terminal-readout text-mono" style="margin-right: 8px;" />
+                            <ui:Label name="RopZ" text="0.000" class="terminal-readout text-mono" />
+                        </ui:VisualElement>
+                        <ui:Button name="RezeroPositionButton" text="Re-zero" class="button-secondary text-body" style="margin-top: 8px;" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="card" style="flex-grow: 1; background-color: rgba(255,255,255,0.03);">
+                        <ui:Label text="Reset Origin — Rotation (ROR)" class="text-body" style="-unity-font-style: bold;" />
+                        <ui:Label text="Captured raw rotation becomes level/forward" class="text-micro" style="margin-bottom: 10px; white-space: normal;" />
+                        <ui:VisualElement style="flex-direction: row;">
+                            <ui:Label name="RorTilt" text="0.000" class="terminal-readout text-mono" style="margin-right: 8px;" />
+                            <ui:Label name="RorRoll" text="0.000" class="terminal-readout text-mono" style="margin-right: 8px;" />
+                            <ui:Label name="RorPan" text="0.000" class="terminal-readout text-mono" />
+                        </ui:VisualElement>
+                        <ui:Button name="RezeroRotationButton" text="Re-zero" class="button-secondary text-body" style="margin-top: 8px;" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement name="PanelApp" class="card" style="display: none;">
+                <ui:Toggle name="DiagnosticsOverlayToggle" label="Diagnostics Overlay" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="KeepScreenAwakeToggle" label="Keep Screen Awake" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="ZoomSliderToggle" label="Zoom Slider" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="SafeAreaToggle" label="Safe Area" class="text-body" style="margin-bottom: 8px;" />
+                <ui:TextField name="RecordDelayField" label="Record Delay (s)" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Label text="HUD Visibility" class="text-title" style="margin-top: 16px; margin-bottom: 10px;" />
+                <ui:Toggle name="StatusStripVisibleToggle" label="Status Strip" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="RigPresetRowVisibleToggle" label="Rig Preset Row" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="FreezeAxisRowVisibleToggle" label="Freeze-Axis Row" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="BottomControlBarVisibleToggle" label="Bottom Control Bar" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="RecordReadinessWarningVisibleToggle" label="Record-Readiness Warning Banner" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="TerminalReadoutVisibleToggle" label="Terminal Readout" class="text-body" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="PanelConnection" class="card" style="display: none;">
+                <ui:TextField name="ConnIpField" label="IP" class="text-body" style="margin-bottom: 8px;" />
+                <ui:TextField name="ConnPosePortField" label="Pose UDP Port" class="text-body" style="margin-bottom: 8px;" />
+                <ui:TextField name="ConnVideoPortField" label="Video/Cmd TCP Port" class="text-body" style="margin-bottom: 8px;" />
+                <ui:TextField name="ConnTokenField" label="Token" class="text-body" />
+                <ui:Label name="ConnError" class="text-caption" style="color: rgb(224,100,100); display: none; margin-top: 6px;" />
+                <ui:VisualElement style="flex-direction: row; margin-top: 14px;">
+                    <ui:Button name="ReconnectButton" text="Reconnect" class="button-secondary text-body" style="margin-right: 10px;" />
+                    <ui:Button name="UnpairButton" text="Unpair" class="button-danger text-body" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement name="PanelCamera" class="card" style="display: none;">
+                <ui:Toggle name="ZoomSliderVisibleToggle" label="Zoom Slider Visibility" class="text-body" style="margin-bottom: 8px;" />
+                <ui:TextField name="ZoomSensitivityField" label="Zoom Slider Sensitivity" class="text-body" style="margin-bottom: 8px;" />
+                <ui:Toggle name="ZoomSliderReleaseToggle" label="Release: Back to Center" class="text-body" />
+
+                <ui:Label text="HUD Background" class="text-title" style="margin-top: 16px; margin-bottom: 4px;" />
+                <ui:Label text="Turn off to show only the buttons/controls over the live camera feed" class="text-micro" style="margin-bottom: 8px; white-space: normal;" />
+                <ui:Toggle name="HudBackgroundToggle" label="Show HUD Background" class="text-body" style="margin-bottom: 8px;" />
+                <ui:VisualElement style="flex-direction: row; justify-content: space-between;">
+                    <ui:Label text="Opacity" class="text-caption" />
+                    <ui:Label name="HudBackgroundOpacityValue" text="1.0" class="text-caption" />
+                </ui:VisualElement>
+                <ui:Slider name="HudBackgroundOpacitySlider" low-value="0" high-value="1" value="1" />
+
+                <ui:Label text="Blender Camera" class="text-title" style="margin-top: 16px; margin-bottom: 8px;" />
+                <ui:Label name="BlenderCameraStatus" text="-- (no live pose yet)" class="text-body" style="margin-bottom: 10px;" />
+                <ui:Label text="FOCAL LENGTH (MM)" class="text-micro" />
+                <ui:Label name="FocalLengthReadout" text="50.0" class="terminal-readout text-mono" style="margin-bottom: 10px; margin-top: 4px;" />
+                <ui:Label text="SENSOR WIDTH (MM)" class="text-micro" />
+                <ui:Label name="SensorWidthReadout" text="36.0" class="terminal-readout text-mono" style="margin-top: 4px;" />
+                <ui:Label text="Sensor height, lens distortion, stream quality and frame rate are reserved placeholders — not wired up yet." class="text-micro" style="margin-top: 12px; white-space: normal;" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="PanelDiagnostics" class="card" style="display: none;">
+                <ui:Label text="Diagnostics" class="text-title" style="margin-bottom: 4px;" />
+                <ui:Label text="A small green readout on the Recording HUD showing live values, for troubleshooting a pose that isn't reaching Blender." class="text-micro" style="margin-bottom: 12px; white-space: normal;" />
+                <ui:Toggle name="DiagVisibleToggle" label="Show Diagnostics on HUD" class="text-body" style="margin-bottom: 12px;" />
+
+                <ui:Label text="Fields shown" class="text-body" style="-unity-font-style: bold; margin-bottom: 6px;" />
+                <ui:Toggle name="DiagShowPositionToggle" label="Position (raw AR + Blender-space)" class="text-body" style="margin-bottom: 6px;" />
+                <ui:Toggle name="DiagShowRotationToggle" label="Rotation (raw AR + Blender-space)" class="text-body" style="margin-bottom: 6px;" />
+                <ui:Toggle name="DiagShowTrackingToggle" label="Tracking state (ARSession, warm-up)" class="text-body" style="margin-bottom: 6px;" />
+                <ui:Toggle name="DiagShowPacketsToggle" label="Packets sent / send errors" class="text-body" style="margin-bottom: 6px;" />
+                <ui:Toggle name="DiagShowArmedToggle" label="Armed (Lock Start)" class="text-body" style="margin-bottom: 6px;" />
+                <ui:Toggle name="DiagShowCancelledToggle" label="Cancelled countdowns" class="text-body" style="margin-bottom: 6px;" />
+                <ui:Toggle name="DiagShowRecordStateToggle" label="Record state" class="text-body" />
+            </ui:VisualElement>
+
+        </ui:ScrollView>
+    </ui:VisualElement>
+</ui:UXML>
