@@ -1,0 +1,24 @@
+{
+    "name": "CamLinkPro.EditorTools",
+    "rootNamespace": "CamLinkPro.EditorTools",
+    "references": [
+        "CamLinkPro.Runtime",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "Unity.XR.ARFoundation",
+        "Unity.XR.CoreUtils",
+        "Unity.XR.Management.Editor",
+        "Unity.XR.Management"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

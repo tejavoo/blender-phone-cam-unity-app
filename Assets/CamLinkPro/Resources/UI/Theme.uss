@@ -1,0 +1,228 @@
+/* Design tokens — refined against the real mockup reference (warm dark
+   vignette, pill status badges, monospace-flavored terminal readouts).
+   Runtime text sizing/boldness is driven by ThemeService.cs from the
+   text-role classes below — do not hardcode font-size on text elements. */
+
+.screen-root {
+    flex-grow: 1;
+    background-color: rgb(13, 12, 11);
+}
+
+/* Subtle warm vignette used behind working screens (HUD, preflight) to match
+   the mockup's lit-from-below feel without needing an image asset. */
+.screen-root--vignette {
+    background-color: rgb(15, 13, 11);
+}
+
+.panel-translucent {
+    background-color: rgba(11, 13, 16, 0.55);
+}
+
+.card {
+    background-color: rgba(24, 22, 20, 0.94);
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.06);
+    padding: 20px;
+}
+
+.button-primary {
+    background-color: rgb(74, 144, 255);
+    color: white;
+    border-radius: 14px;
+    -unity-font-style: bold;
+    padding: 16px 34px;
+    border-width: 0;
+}
+
+.button-secondary {
+    background-color: rgba(32, 30, 28, 0.9);
+    color: rgb(225, 222, 218);
+    border-radius: 14px;
+    padding: 16px 34px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.07);
+}
+
+.button-danger {
+    background-color: rgb(138, 44, 48);
+    color: white;
+    border-radius: 14px;
+    padding: 16px 34px;
+    border-width: 0;
+}
+
+.button-text-link {
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(102, 160, 255);
+    border-width: 0;
+    -unity-font-style: normal;
+    padding: 8px 4px;
+}
+
+/* Selectable chip — used for rig presets and the freeze-axis row. Toggled
+   state is applied via the --chip-selected class from code. */
+.chip {
+    background-color: rgba(32, 30, 28, 0.9);
+    color: rgb(200, 197, 192);
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.07);
+    padding: 10px 20px;
+    margin-right: 8px;
+}
+
+.chip--selected {
+    background-color: rgba(74, 144, 255, 0.18);
+    color: rgb(140, 180, 255);
+    border-color: rgba(74, 144, 255, 0.6);
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 5px;
+}
+
+.status-dot--good { background-color: rgb(64, 200, 130); }
+.status-dot--degraded { background-color: rgb(224, 168, 62); }
+.status-dot--lost { background-color: rgb(214, 82, 86); }
+
+/* Pill status badge — icon + label, used for link/blender/pose in the HUD
+   status strip, matching the mockup's compact rounded-pill treatment. */
+.status-pill {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.08);
+    padding: 8px 16px;
+    margin-right: 8px;
+}
+
+.status-pill__icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    -unity-text-align: middle-center;
+    margin-right: 8px;
+    font-size: 12px;
+    color: rgb(15, 13, 11);
+    -unity-font-style: bold;
+}
+
+.status-pill__icon--good { background-color: rgb(64, 200, 130); }
+.status-pill__icon--degraded { background-color: rgb(224, 168, 62); }
+.status-pill__icon--lost { background-color: rgb(214, 82, 86); }
+
+.terminal-readout {
+    background-color: rgb(6, 10, 9);
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: rgba(64, 200, 130, 0.25);
+    padding: 8px 12px;
+    color: rgb(64, 200, 130);
+    -unity-font-style: bold;
+    letter-spacing: 0.5px;
+}
+
+.terminal-readout--error {
+    color: rgb(224, 100, 100);
+    border-color: rgba(224, 100, 100, 0.3);
+}
+
+/* Text roles — ThemeService.cs owns the actual font-size (from AppPrefs) at
+   runtime; these are just fallback sizes for the pre-scale editor preview. */
+.text-display { font-size: 40px; color: white; -unity-font-style: bold; }
+.text-title { font-size: 24px; color: white; -unity-font-style: bold; }
+.text-subtitle { font-size: 18px; color: rgb(210, 207, 202); }
+.text-body { font-size: 15px; color: rgb(220, 217, 213); }
+.text-caption { font-size: 12px; color: rgb(160, 157, 152); }
+.text-micro { font-size: 11px; color: rgb(140, 137, 132); }
+.text-mono { font-size: 14px; color: rgb(210, 207, 202); letter-spacing: 0.5px; }
+
+/* Base UI Toolkit controls default to editor-theme colors; restate for dark runtime UI. */
+Label {
+    color: rgb(220, 217, 213);
+}
+
+TextField > Label {
+    color: rgb(170, 167, 162);
+    min-width: 100px;
+}
+
+TextField TextInput {
+    background-color: rgb(30, 28, 26);
+    color: white;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.08);
+    padding: 6px 10px;
+}
+
+Toggle > Label {
+    color: rgb(220, 217, 213);
+}
+
+Toggle {
+    margin: 0;
+}
+
+Toggle .unity-toggle__input {
+    margin: 0;
+}
+
+Toggle .unity-toggle__checkmark {
+    width: 22px;
+    height: 22px;
+    background-color: rgb(30, 28, 26);
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    background-image: none;
+}
+
+Toggle:checked .unity-toggle__checkmark {
+    background-color: rgb(74, 144, 255);
+    border-color: rgb(74, 144, 255);
+}
+
+Slider {
+    margin: 0;
+}
+
+Slider > .unity-base-slider__tracker {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    border-width: 0;
+    height: 4px;
+}
+
+Slider > .unity-base-slider__dragger {
+    background-color: rgb(74, 144, 255);
+    border-width: 0;
+    border-radius: 999px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Floating vertical zoom rail beside the HUD record panel. */
+.zoom-rail.unity-base-slider--vertical .unity-base-slider__tracker {
+    width: 6px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+}
+
+.zoom-rail.unity-base-slider--vertical .unity-base-slider__dragger {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background-color: rgb(74, 144, 255);
+    left: -11px;
+}
+
+DropdownField {
+    background-color: rgb(30, 28, 26);
+    border-radius: 8px;
+}

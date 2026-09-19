@@ -1,0 +1,21 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="../Theme.uss" />
+    <ui:VisualElement name="ScanQrRoot" class="screen-root screen-root--vignette" style="padding: 32px; align-items: center;">
+
+        <ui:VisualElement style="flex-direction: row; justify-content: space-between; width: 100%; align-items: center;">
+            <ui:Label text="Scan QR" class="text-title" />
+            <ui:VisualElement class="status-pill">
+                <ui:VisualElement class="status-dot status-dot--good" style="margin-right: 8px;" />
+                <ui:Label text="Camera active" class="text-caption" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="ViewfinderFrame" style="width: 520px; height: 520px; border-width: 3px; border-color: rgb(74,144,255); border-radius: 28px; margin-top: 48px; overflow: hidden;">
+            <ui:Image name="CameraPreview" style="flex-grow: 1;" />
+        </ui:VisualElement>
+
+        <ui:Label text="Point the camera at the pairing QR shown by Blender." class="text-subtitle" style="margin-top: 28px; white-space: normal; -unity-text-align: upper-center;" />
+
+        <ui:Button name="CancelButton" text="Cancel" class="button-secondary text-body" style="margin-top: 36px; width: 220px; -unity-text-align: middle-center;" />
+    </ui:VisualElement>
+</ui:UXML>

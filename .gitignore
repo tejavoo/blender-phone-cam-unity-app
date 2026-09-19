@@ -6,6 +6,7 @@
 /[Bb]uilds/
 /[Ll]ogs/
 /[Uu]serSettings/
+/.utmp/
 
 # Visual Studio / VS Code / IDE files
 /.vs/
@@ -37,7 +38,12 @@ ehthumbs.db
 [Tt]humbs.db
 
 # Builds & APKs
-#*.apk
+*.apk
 *.aab
 *.unitypackage
 .utmp/
+
+# Local scratch/debug artifacts (screenshots, ad-hoc logs, notes) --
+# never part of the project source.
+*.log
+/misc_docs_llms/
