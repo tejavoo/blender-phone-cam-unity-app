@@ -58,6 +58,7 @@ namespace CamLinkPro.Preferences
             yield return Float("HudBackgroundOpacity", AppPrefs.HudBackgroundOpacity);
             yield return Bool("LiveMonitorVisible", AppPrefs.LiveMonitorVisible);
             yield return Float("LiveMonitorOpacity", AppPrefs.LiveMonitorOpacity);
+            yield return Float("SteadyAmount", AppPrefs.SteadyAmount);
 
             yield return Bool("DiagnosticsHudVisible", AppPrefs.DiagnosticsHudVisible);
             yield return Bool("DiagShowPosition", AppPrefs.DiagShowPosition);

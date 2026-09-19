@@ -10,7 +10,7 @@ namespace CamLinkPro.UI.Screens
     public class RecordingHudScreen : IScreenController
     {
         static readonly CalibrationSettings Calibration = new();
-        static readonly ZoomState Zoom = new();
+        static ZoomState Zoom => ZoomState.Shared;
         static AxisFreezeState _freeze;
 
         VisualElement _root;
@@ -22,7 +22,6 @@ namespace CamLinkPro.UI.Screens
         VerticalDragControl _zoomRail;
         DraggableOverlay _diagDrag;
 
-        Label _recordStateLabel;
         Label _zoomLabel;
         Label _zoomModeLabel;
         Label _dollyLabel;
@@ -69,6 +68,7 @@ namespace CamLinkPro.UI.Screens
                 _channel.StateChanged += OnChannelStateChanged;
                 _channel.BlenderStateChanged += OnBlenderStateChanged;
                 _channel.FrameReceived += OnFrameReceived;
+                _channel.StatusLineReceived += OnStatusLineReceived;
                 _channel.Start();
             }
 
@@ -95,7 +95,6 @@ namespace CamLinkPro.UI.Screens
             _pipeline.SetFreeze(_freeze);
             _pipeline.LevelHorizon = Calibration.LevelHorizon.Value;
 
-            _recordStateLabel = root.Q<Label>("RecordStateLabel");
             _zoomLabel = root.Q<Label>("ZoomLabel");
             _zoomModeLabel = root.Q<Label>("ZoomModeLabel");
             _dollyLabel = root.Q<Label>("DollyLabel");
@@ -129,10 +128,15 @@ namespace CamLinkPro.UI.Screens
 
             var steadySlider = root.Q<Slider>("SteadySlider");
             var steadyValue = root.Q<Label>("SteadyValue");
+            // Same fix as Opacity: previously ephemeral (reset to the
+            // pipeline's own in-memory default on every Mount instead of
+            // remembering what the user last set).
+            _pipeline.Steadiness = AppPrefs.SteadyAmount.Value;
             steadySlider.value = _pipeline.Steadiness;
             steadyValue.text = steadySlider.value.ToString("F1");
             steadySlider.RegisterValueChangedCallback(evt =>
             {
+                AppPrefs.SteadyAmount.Value = evt.newValue;
                 steadyValue.text = evt.newValue.ToString("F1");
                 _pipeline.Steadiness = evt.newValue;
             });
@@ -368,7 +372,6 @@ namespace CamLinkPro.UI.Screens
         void StartRecording()
         {
             _isRecording = true;
-            _recordStateLabel.text = "Recording";
             _channel?.SendCommand("START");
             UpdateRecordButtonVisual();
         }
@@ -380,10 +383,30 @@ namespace CamLinkPro.UI.Screens
             HapticFeedback.Trigger();
 
             _isRecording = false;
-            _recordStateLabel.text = "Idle";
             _channel?.SendCommand("STOP");
             ShowSavedToast();
             UpdateRecordButtonVisual();
+        }
+
+        /// Blender's own panel can start/stop recording independently of the
+        /// phone (its Record Motion toggle, or a phone-initiated command
+        /// echoed back) -- REC_ON/REC_OFF keep the phone's button in sync
+        /// with reality either way, without re-sending the command that
+        /// caused it.
+        void OnStatusLineReceived(string line)
+        {
+            switch (line)
+            {
+                case "REC_ON" when !_isRecording:
+                    _isRecording = true;
+                    UpdateRecordButtonVisual();
+                    break;
+                case "REC_OFF" when _isRecording:
+                    _isRecording = false;
+                    UpdateRecordButtonVisual();
+                    ShowSavedToast();
+                    break;
+            }
         }
 
         /// One button doing double duty as Record/Stop -- a Stop button next

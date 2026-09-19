@@ -205,6 +205,11 @@ namespace CamLinkPro.UI.Screens
                     AppPrefs.ZoomSliderSensitivity.Value = UnityEngine.Mathf.Clamp(v, 0.25f, 4f);
             });
 
+            // Reflects whatever ZoomState.Shared last actually computed --
+            // via ArSessionController.GetVerticalFovDeg(), which itself
+            // reads the real device's camera intrinsics when available --
+            // rather than a permanently-fixed placeholder.
+            _root.Q<Label>("FocalLengthReadout").text = ZoomState.Shared.LastResolvedFocalLengthMm.ToString("F1");
             _root.Q<Label>("SensorWidthReadout").text = ZoomState.SensorWidthMm.ToString("F1");
 
             const string BackToCenter = "Back to Center";

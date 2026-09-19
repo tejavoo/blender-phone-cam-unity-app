@@ -10,8 +10,19 @@ namespace CamLinkPro.Calibration
         public const float MinFocalLengthMm = 10f;
         public const float MaxFocalLengthMm = 300f;
 
+        /// One instance shared across screens (the Recording HUD and
+        /// Settings' Camera tab both need "what's the current zoom" -- the
+        /// HUD to drive it live, Settings to display it as more than a
+        /// frozen placeholder even when opened on its own from Landing).
+        public static readonly ZoomState Shared = new();
+
         public Mode CurrentMode { get; set; } = Mode.Auto;
         public float ManualFocalLengthMm { get; private set; } = 50f;
+
+        /// The last value Resolve() actually computed, regardless of mode --
+        /// lets Settings show a real, device-intrinsics-derived number
+        /// instead of a permanently-fixed "50.0" placeholder.
+        public float LastResolvedFocalLengthMm { get; private set; } = 50f;
 
         public void SetManualFocalLength(float mm) =>
             ManualFocalLengthMm = Mathf.Clamp(mm, MinFocalLengthMm, MaxFocalLengthMm);
@@ -24,10 +35,15 @@ namespace CamLinkPro.Calibration
             return SensorWidthMm / (2f * Mathf.Tan(horizontalFovRad / 2f));
         }
 
-        public float Resolve(float liveVerticalFovDeg, float aspectRatio) => CurrentMode switch
+        public float Resolve(float liveVerticalFovDeg, float aspectRatio)
         {
-            Mode.Manual => ManualFocalLengthMm,
-            _ => FocalLengthFromVerticalFov(liveVerticalFovDeg, aspectRatio)
-        };
+            var value = CurrentMode switch
+            {
+                Mode.Manual => ManualFocalLengthMm,
+                _ => FocalLengthFromVerticalFov(liveVerticalFovDeg, aspectRatio)
+            };
+            LastResolvedFocalLengthMm = value;
+            return value;
+        }
     }
 }

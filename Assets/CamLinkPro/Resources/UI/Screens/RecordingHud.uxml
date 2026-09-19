@@ -60,8 +60,6 @@
             </ui:VisualElement>
 
             <ui:VisualElement name="RecordPanel" class="card" style="align-items: stretch; width: 260px;">
-                <ui:Label name="RecordStateLabel" text="Idle" class="text-title" style="margin-bottom: 10px;" />
-                <ui:VisualElement style="height: 1px; background-color: rgba(255,255,255,0.08); margin-bottom: 14px;" />
                 <ui:Button name="RecordButton" text="Record" class="button-primary text-body" style="width: 100%; -unity-text-align: middle-center;" />
             </ui:VisualElement>
         </ui:VisualElement>
