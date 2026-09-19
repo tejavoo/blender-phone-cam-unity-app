@@ -1,5 +1,18 @@
 # Cam Link Pro — Complete Rebuild Specification
 
+Refer - https://claude.ai/artifact/2sDLBzMfR4Hdf16u5V9tmW  ----> For mockup of screens that were to be reproduced
+Donot just use as is as some other added features etc could be there so keep the artifact mockups as the design inspiratiion
+
+Important : setup the fresh project right up with complete free resources available and most importantly using
+Unity UI Toolkit right from the beginning - in phases while testing it over
+
+Just FYI - ''' My recommendation: before touching the real app, first phase should be this which can be scrapped  fot the next phases onwards — a brand-new empty scene with just one UIDocument and one button, tested with a real finger tap on your device. That single test tells you whether the touch-dispatch bug is specific to this project's setup or a genuine Unity 6000.6.0f1 platform bug — if the minimal case also fails, try it on a different Unity version (an LTS release like 6000.0 rather than 6000.6) before committing to anything bigger.
+
+Only once that minimal case reliably receives taps would I start the actual rebuild — and I'd build it as real UXML/USS per screen (not procedural C# construction the way the uGUI version was built), using llms_complete_specs.txt as the domain/UX spec so you're not re-deriving the networking protocol, calibration math, or screen flows from scratch.
+
+The main tradeoff: UI Toolkit gives you genuinely nicer authoring (CSS-like styling, hot-reloadable markup, better performance) than what procedural uGUI construction gave this build — but that's only worth it if the touch bug turns out to be fixable or version-specific. If the minimal repro shows it's a hard blocker on your Unity version, uGUI stays the pragmatic choice regardless of how nice UI Toolkit would otherwise be. '''
+
+
 Purpose of this document: a self-contained, dense technical + UX spec of the Cam Link Pro
 mobile app, written so a future engineering effort (by an LLM or a human) can rebuild the
 app from scratch — this time targeting Unity UI Toolkit instead of uGUI — without needing

@@ -46,4 +46,3 @@ ehthumbs.db
 # Local scratch/debug artifacts (screenshots, ad-hoc logs, notes) --
 # never part of the project source.
 *.log
-/misc_docs_llms/
