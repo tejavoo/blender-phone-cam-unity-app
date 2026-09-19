@@ -57,13 +57,13 @@ namespace CamLinkPro.Preferences
             yield return Bool("HudBackgroundEnabled", AppPrefs.HudBackgroundEnabled);
             yield return Float("HudBackgroundOpacity", AppPrefs.HudBackgroundOpacity);
             yield return Bool("LiveMonitorVisible", AppPrefs.LiveMonitorVisible);
+            yield return Float("LiveMonitorOpacity", AppPrefs.LiveMonitorOpacity);
 
             yield return Bool("DiagnosticsHudVisible", AppPrefs.DiagnosticsHudVisible);
             yield return Bool("DiagShowPosition", AppPrefs.DiagShowPosition);
             yield return Bool("DiagShowRotation", AppPrefs.DiagShowRotation);
             yield return Bool("DiagShowTracking", AppPrefs.DiagShowTracking);
             yield return Bool("DiagShowPackets", AppPrefs.DiagShowPackets);
-            yield return Bool("DiagShowArmed", AppPrefs.DiagShowArmed);
             yield return Bool("DiagShowCancelled", AppPrefs.DiagShowCancelled);
             yield return Bool("DiagShowRecordState", AppPrefs.DiagShowRecordState);
         }

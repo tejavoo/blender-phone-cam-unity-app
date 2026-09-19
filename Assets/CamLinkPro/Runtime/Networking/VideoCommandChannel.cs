@@ -15,6 +15,16 @@ namespace CamLinkPro.Networking
         const int ReconnectBackoffMs = 1500;
         const int MaxFrameBytes = 16 * 1024 * 1024;
 
+        // A dead-but-not-closed TCP connection (WiFi drop without a clean
+        // FIN/RST, a Blender-side stall) otherwise leaves client.Connected
+        // reporting true indefinitely -- the "connected" pill would sit
+        // green over a link that isn't actually moving anything. PING/PONG
+        // is already part of the wire contract (the addon answers it); this
+        // is what actually uses it to detect a stale connection and force a
+        // reconnect instead of trusting the raw socket state.
+        const int PingIntervalMs = 3000;
+        const int PongTimeoutMs = 8000;
+
         readonly string _ip;
         readonly int _port;
         readonly string _token;
@@ -25,6 +35,7 @@ namespace CamLinkPro.Networking
         Thread _worker;
         volatile bool _running;
         byte[] _latestFrame;
+        int _lastPongTickMs;
 
         public event Action<ChannelState> StateChanged;
         public event Action<BlenderLiveState> BlenderStateChanged;
@@ -99,10 +110,21 @@ namespace CamLinkPro.Networking
         {
             var readBuffer = new byte[4096];
             var textLine = new MemoryStream();
+            var lastPingSent = Environment.TickCount;
+            _lastPongTickMs = Environment.TickCount; // grace period before the first PONG
 
             while (_running && client.Connected)
             {
                 FlushOutgoingCommands(stream);
+
+                var now = Environment.TickCount;
+                if (now - lastPingSent >= PingIntervalMs)
+                {
+                    WriteLine(stream, "PING");
+                    lastPingSent = now;
+                }
+                if (now - _lastPongTickMs > PongTimeoutMs)
+                    break; // no PONG in too long -- treat as dead, force a reconnect
 
                 if (!stream.DataAvailable)
                 {
@@ -192,6 +214,9 @@ namespace CamLinkPro.Networking
 
         void HandleStatusLine(string line)
         {
+            if (line == "PONG")
+                _lastPongTickMs = Environment.TickCount;
+
             _mainThreadEvents.Enqueue(() => StatusLineReceived?.Invoke(line));
 
             if (line.StartsWith("STATE ", StringComparison.Ordinal))

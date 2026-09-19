@@ -14,7 +14,6 @@ namespace CamLinkPro.UI.Screens
         VisualElement _pairedGroup;
         VisualElement _manualEntryModal;
         VisualElement _aboutModal;
-        VisualElement _recentChips;
         Label _manualEntryError;
         Label _pairedSubline;
         Button _letsRecordButton;
@@ -44,7 +43,6 @@ namespace CamLinkPro.UI.Screens
             _pairedGroup = root.Q("PairedGroup");
             _manualEntryModal = root.Q("ManualEntryModal");
             _aboutModal = root.Q("AboutModal");
-            _recentChips = root.Q("RecentChips");
             _manualEntryError = root.Q<Label>("ManualEntryError");
             _pairedSubline = root.Q<Label>("PairedSubline");
             _letsRecordButton = root.Q<Button>("LetsRecordButton");
@@ -80,7 +78,6 @@ namespace CamLinkPro.UI.Screens
 
             _currentPairing = PairingStore.LoadLastUsed();
             SetPaired(_currentPairing);
-            RefreshRecentChips();
             RefreshWifiWarning();
             ConsumePendingScan();
         }
@@ -208,7 +205,6 @@ namespace CamLinkPro.UI.Screens
             CloseModal();
             PairingStore.SaveLastUsed(pairing);
             SetPaired(pairing);
-            RefreshRecentChips();
         }
 
         void OnProbeFailed(PairingInfo pairing)
@@ -256,29 +252,6 @@ namespace CamLinkPro.UI.Screens
                 _pairedSubline.text = $"pose:{pairing.Value.PosePort} video/cmd:{pairing.Value.VideoPort}";
 
             RefreshWifiWarning();
-        }
-
-        void RefreshRecentChips()
-        {
-            _recentChips.Clear();
-            foreach (var pairing in PairingStore.LoadHistory())
-            {
-                var chip = new Button(() =>
-                {
-                    // Route through the same verified-connect path as manual
-                    // entry — a stale recent pairing might not be reachable
-                    // any more, and the modal is where that gets surfaced.
-                    OpenModal(pairing);
-                    StartConnectionProbe(pairing);
-                })
-                {
-                    text = $"{pairing.Ip}:{pairing.VideoPort}"
-                };
-                chip.AddToClassList("chip");
-                chip.AddToClassList("text-caption");
-                chip.style.marginBottom = 8;
-                _recentChips.Add(chip);
-            }
         }
 
         void RefreshWifiWarning()

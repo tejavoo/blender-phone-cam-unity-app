@@ -235,7 +235,6 @@ namespace CamLinkPro.UI.Screens
             BindToggle("DiagShowRotationToggle", AppPrefs.DiagShowRotation);
             BindToggle("DiagShowTrackingToggle", AppPrefs.DiagShowTracking);
             BindToggle("DiagShowPacketsToggle", AppPrefs.DiagShowPackets);
-            BindToggle("DiagShowArmedToggle", AppPrefs.DiagShowArmed);
             BindToggle("DiagShowCancelledToggle", AppPrefs.DiagShowCancelled);
             BindToggle("DiagShowRecordStateToggle", AppPrefs.DiagShowRecordState);
         }

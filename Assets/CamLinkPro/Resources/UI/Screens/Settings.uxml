@@ -3,7 +3,7 @@
     <ui:VisualElement name="SettingsRoot" class="screen-root" style="padding: 40px;">
 
         <ui:VisualElement style="flex-direction: row; align-items: center; margin-bottom: 24px;">
-            <ui:Button name="BackButton" text="&lt; Back" class="button-text-link text-body" />
+            <ui:Button name="BackButton" text="&lt; Back" class="button-nav text-body" />
             <ui:Label text="Settings" class="text-title" style="margin-left: 20px;" />
         </ui:VisualElement>
 
@@ -138,7 +138,6 @@
                 <ui:Toggle name="DiagShowRotationToggle" label="Rotation (raw AR + Blender-space)" class="text-body" style="margin-bottom: 6px;" />
                 <ui:Toggle name="DiagShowTrackingToggle" label="Tracking state (ARSession, warm-up)" class="text-body" style="margin-bottom: 6px;" />
                 <ui:Toggle name="DiagShowPacketsToggle" label="Packets sent / send errors" class="text-body" style="margin-bottom: 6px;" />
-                <ui:Toggle name="DiagShowArmedToggle" label="Armed (Lock Start)" class="text-body" style="margin-bottom: 6px;" />
                 <ui:Toggle name="DiagShowCancelledToggle" label="Cancelled countdowns" class="text-body" style="margin-bottom: 6px;" />
                 <ui:Toggle name="DiagShowRecordStateToggle" label="Record state" class="text-body" />
             </ui:VisualElement>

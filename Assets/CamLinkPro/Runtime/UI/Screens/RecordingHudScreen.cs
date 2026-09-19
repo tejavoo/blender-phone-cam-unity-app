@@ -34,10 +34,12 @@ namespace CamLinkPro.UI.Screens
         Label _diagnosticsText;
         Image _liveMonitorImage;
         Texture2D _monitorTexture;
+        VisualElement _recordingBorderOverlay;
+        Button _recordButton;
         bool _isRecording;
         bool _wasConnected = true;
         bool _poseActuallySending;
-        bool _armed;
+        float _zoomFocalAtDragStart;
         int _cancelledCountdowns;
         bool _countdownCancelled;
         long _countdownToken;
@@ -104,6 +106,7 @@ namespace CamLinkPro.UI.Screens
             _diagnosticsOverlay = root.Q("DiagnosticsOverlay");
             _diagnosticsText = root.Q<Label>("DiagnosticsText");
             _liveMonitorImage = root.Q<Image>("LiveMonitorImage");
+            _recordingBorderOverlay = root.Q("RecordingBorderOverlay");
 
             _diagDrag = new DraggableOverlay(_diagnosticsOverlay, root.Q("DiagnosticsHeader"), root.Q("HudRoot"));
             _diagDrag.SetPosition(new Vector2(AppPrefs.DiagnosticsOverlayX.Value, AppPrefs.DiagnosticsOverlayY.Value));
@@ -118,19 +121,11 @@ namespace CamLinkPro.UI.Screens
                 _diagnosticsOverlay.style.display = DisplayStyle.None;
             };
 
-            root.Q<Button>("RecordButton").clicked += OnRecordClicked;
-            root.Q<Button>("StopButton").clicked += OnStopClicked;
+            _recordButton = root.Q<Button>("RecordButton");
+            _recordButton.clicked += OnRecordButtonClicked;
             root.Q<Button>("CountdownCancelButton").clicked += OnCountdownCancelClicked;
             root.Q<Button>("ZoomMinus").clicked += () => AdjustZoom(-5f);
             root.Q<Button>("ZoomPlus").clicked += () => AdjustZoom(5f);
-
-            var lockStartToggle = root.Q<Toggle>("LockStartToggle");
-            lockStartToggle.RegisterValueChangedCallback(evt =>
-            {
-                _armed = evt.newValue;
-                if (_armed)
-                    _channel?.SendCommand("LOCK_START");
-            });
 
             var steadySlider = root.Q<Slider>("SteadySlider");
             var steadyValue = root.Q<Label>("SteadyValue");
@@ -144,9 +139,15 @@ namespace CamLinkPro.UI.Screens
 
             var opacitySlider = root.Q<Slider>("OpacitySlider");
             var opacityValue = root.Q<Label>("OpacityValue");
+            // Previously ephemeral (reset to the UXML's hardcoded value on
+            // every Mount, e.g. after a trip to Settings and back) -- now
+            // backed by a pref like every other persistent control.
+            opacitySlider.value = AppPrefs.LiveMonitorOpacity.Value;
+            opacityValue.text = opacitySlider.value.ToString("F1");
             _liveMonitorImage.style.opacity = opacitySlider.value;
             opacitySlider.RegisterValueChangedCallback(evt =>
             {
+                AppPrefs.LiveMonitorOpacity.Value = evt.newValue;
                 opacityValue.text = evt.newValue.ToString("F1");
                 _liveMonitorImage.style.opacity = evt.newValue;
             });
@@ -169,8 +170,21 @@ namespace CamLinkPro.UI.Screens
                 () => AppPrefs.ZoomSliderSnapsToCenter.Value);
             _zoomRail.Value = 0.5f;
             _zoomRail.ValueChanged += _ => { }; // rate applied continuously in Tick from current rail value
+            _zoomFocalAtDragStart = Zoom.ManualFocalLengthMm;
+            _zoomRail.Pressed += () => _zoomFocalAtDragStart = Zoom.ManualFocalLengthMm;
+            _zoomRail.Released += () =>
+            {
+                // "Back to Center" means the zoom itself returns to where it
+                // was before this drag, not just the rail handle recentring
+                // visually while the focal length stays wherever it drifted.
+                if (!AppPrefs.ZoomSliderSnapsToCenter.Value)
+                    return;
+                Zoom.SetManualFocalLength(_zoomFocalAtDragStart);
+                UpdateZoomLabel();
+            };
 
             UpdateZoomLabel();
+            UpdateRecordButtonVisual();
             ApplyHudVisibilityPrefs();
             ApplyHudBackgroundPref();
             _lastTickTime = Time.unscaledTime;
@@ -299,6 +313,14 @@ namespace CamLinkPro.UI.Screens
             UpdateZoomLabel();
         }
 
+        void OnRecordButtonClicked()
+        {
+            if (_isRecording)
+                OnStopClicked();
+            else
+                OnRecordClicked();
+        }
+
         void OnRecordClicked()
         {
             if (_isRecording)
@@ -348,6 +370,7 @@ namespace CamLinkPro.UI.Screens
             _isRecording = true;
             _recordStateLabel.text = "Recording";
             _channel?.SendCommand("START");
+            UpdateRecordButtonVisual();
         }
 
         void OnStopClicked()
@@ -360,6 +383,18 @@ namespace CamLinkPro.UI.Screens
             _recordStateLabel.text = "Idle";
             _channel?.SendCommand("STOP");
             ShowSavedToast();
+            UpdateRecordButtonVisual();
+        }
+
+        /// One button doing double duty as Record/Stop -- a Stop button next
+        /// to an already-showing Record button was redundant, since only one
+        /// of the two actions is ever valid at a time.
+        void UpdateRecordButtonVisual()
+        {
+            _recordButton.text = _isRecording ? "Stop" : "Record";
+            _recordButton.EnableInClassList("button-primary", !_isRecording);
+            _recordButton.EnableInClassList("button-danger", _isRecording);
+            _recordingBorderOverlay.style.display = _isRecording ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         void ShowSavedToast()
@@ -504,8 +539,6 @@ namespace CamLinkPro.UI.Screens
             }
             if (AppPrefs.DiagShowPackets.Value)
                 sb.AppendLine($"Packets sent: {_poseSender?.PacketsSent ?? 0}  lastError: {_poseSender?.LastError}");
-            if (AppPrefs.DiagShowArmed.Value)
-                sb.AppendLine($"Armed: {_armed}");
             if (AppPrefs.DiagShowCancelled.Value)
                 sb.AppendLine($"Cancelled countdowns: {_cancelledCountdowns}");
             if (AppPrefs.DiagShowRecordState.Value)

@@ -152,7 +152,22 @@
     -unity-font-style: bold;
     border-bottom-width: 1px;
     border-bottom-color: rgba(74, 144, 255, 0.55);
-    padding-bottom: 1px;
+    /* Needs real clearance from the baseline -- at 1px this sat inside the
+       descender space and cut straight through letters like the "j" in
+       "Teja", reading as a strikethrough instead of an underline. */
+    padding-bottom: 4px;
+}
+
+/* Clean minimal nav button (Back / Home / Settings) -- a step up from bare
+   text-link but lighter than button-secondary, so top-of-screen navigation
+   doesn't compete with the screen's actual primary actions. */
+.button-nav {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: rgb(220, 217, 213);
+    border-radius: 10px;
+    padding: 10px 18px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.08);
 }
 
 /* Base UI Toolkit controls default to editor-theme colors; restate for dark runtime UI. */
@@ -262,3 +277,21 @@ DropdownField .unity-base-popup-field__text {
 DropdownField .unity-base-popup-field__arrow {
     -unity-background-image-tint-color: rgb(170, 167, 162);
 }
+
+/* Subtle press feedback on every tappable control -- a quick darken +
+   scale-down while held, so a touch always gets an acknowledgment even
+   before whatever the button does actually happens. */
+.button-primary,
+.button-secondary,
+.button-danger,
+.button-nav,
+.chip {
+    transition-property: scale, background-color;
+    transition-duration: 80ms;
+}
+
+.button-primary:active { background-color: rgb(56, 116, 214); scale: 0.96 0.96; }
+.button-secondary:active { background-color: rgba(50, 47, 44, 0.9); scale: 0.96 0.96; }
+.button-danger:active { background-color: rgb(110, 32, 36); scale: 0.96 0.96; }
+.button-nav:active { background-color: rgba(255, 255, 255, 0.12); scale: 0.96 0.96; }
+.chip:active { background-color: rgba(50, 47, 44, 0.9); scale: 0.96 0.96; }

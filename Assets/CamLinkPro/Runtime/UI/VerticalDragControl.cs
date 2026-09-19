@@ -16,6 +16,7 @@ namespace CamLinkPro.UI
 
         public event Action<float> ValueChanged;
         public event Action Released;
+        public event Action Pressed;
 
         public float Value
         {
@@ -44,6 +45,7 @@ namespace CamLinkPro.UI
         void OnPointerDown(PointerDownEvent evt)
         {
             _track.CapturePointer(evt.pointerId);
+            Pressed?.Invoke();
             SetFromLocalY(evt.localPosition.y);
         }
 

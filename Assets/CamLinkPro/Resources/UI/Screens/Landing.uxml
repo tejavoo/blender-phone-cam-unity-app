@@ -17,9 +17,7 @@
         </ui:VisualElement>
 
         <ui:VisualElement name="UnpairedGroup" style="align-items: center;">
-            <ui:Label name="UnpairedBody" text="Pair with the Blender add-on" class="text-subtitle" style="margin-bottom: 20px;" />
-
-            <ui:VisualElement name="RecentChips" style="flex-direction: row; flex-wrap: wrap; justify-content: center; margin-bottom: 24px;" />
+            <ui:Label name="UnpairedBody" text="Pair with the Blender add-on" class="text-subtitle" style="margin-bottom: 24px;" />
 
             <ui:Button name="ScanQrButton" text="Scan QR" class="button-primary text-body" style="width: 300px; margin-bottom: 14px; -unity-text-align: middle-center;" />
             <ui:Button name="EnterManuallyLink" text="Enter Manually" class="button-text-link text-body" />

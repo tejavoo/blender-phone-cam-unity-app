@@ -4,6 +4,8 @@
 
         <ui:Image name="LiveMonitorImage" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: none;" picking-mode="Ignore" />
 
+        <ui:VisualElement name="RecordingBorderOverlay" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-width: 6px; border-color: rgba(224, 90, 90, 0.85); display: none;" picking-mode="Ignore" />
+
         <ui:VisualElement name="DisconnectBanner" style="background-color: rgb(74,18,20); padding: 14px; border-radius: 12px; display: none; margin-bottom: 10px;">
             <ui:Label text="&#9888; Blender disconnected" class="text-body" style="color: white; -unity-font-style: bold;" />
             <ui:VisualElement style="flex-direction: row; margin-top: 8px;">
@@ -13,7 +15,7 @@
         </ui:VisualElement>
 
         <ui:VisualElement name="TopRow" style="flex-direction: row; justify-content: space-between; align-items: center;">
-            <ui:Button name="HomeButton" text="&lt; Home" class="button-text-link text-body" />
+            <ui:Button name="HomeButton" text="&lt; Home" class="button-nav text-body" />
 
             <ui:VisualElement name="StatusStrip" style="flex-direction: row;">
                 <ui:VisualElement class="status-pill">
@@ -30,7 +32,7 @@
                 </ui:VisualElement>
             </ui:VisualElement>
 
-            <ui:Button name="HudSettingsButton" text="Settings" class="button-text-link text-body" />
+            <ui:Button name="HudSettingsButton" text="Settings" class="button-nav text-body" />
         </ui:VisualElement>
 
         <ui:VisualElement name="RigPresetRow" style="flex-direction: row; margin-top: 20px;">
@@ -60,12 +62,7 @@
             <ui:VisualElement name="RecordPanel" class="card" style="align-items: stretch; width: 260px;">
                 <ui:Label name="RecordStateLabel" text="Idle" class="text-title" style="margin-bottom: 10px;" />
                 <ui:VisualElement style="height: 1px; background-color: rgba(255,255,255,0.08); margin-bottom: 14px;" />
-                <ui:VisualElement style="flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-                    <ui:Label text="Lock Start" class="text-body" />
-                    <ui:Toggle name="LockStartToggle" />
-                </ui:VisualElement>
-                <ui:Button name="RecordButton" text="Record" class="button-primary text-body" style="width: 100%; margin-bottom: 8px; -unity-text-align: middle-center;" />
-                <ui:Button name="StopButton" text="Stop" class="button-danger text-body" style="width: 100%; -unity-text-align: middle-center;" />
+                <ui:Button name="RecordButton" text="Record" class="button-primary text-body" style="width: 100%; -unity-text-align: middle-center;" />
             </ui:VisualElement>
         </ui:VisualElement>
 
@@ -79,9 +76,9 @@
                 <ui:VisualElement name="OpacityGroup">
                     <ui:VisualElement style="flex-direction: row; justify-content: space-between;">
                         <ui:Label text="Opacity" class="text-caption" />
-                        <ui:Label name="OpacityValue" text="1.0" class="text-caption" />
+                        <ui:Label name="OpacityValue" text="0.4" class="text-caption" />
                     </ui:VisualElement>
-                    <ui:Slider name="OpacitySlider" low-value="0" high-value="1" value="1" />
+                    <ui:Slider name="OpacitySlider" low-value="0" high-value="1" value="0.4" />
                 </ui:VisualElement>
             </ui:VisualElement>
 

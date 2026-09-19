@@ -25,6 +25,7 @@ namespace CamLinkPro.Preferences
         public static readonly PrefBool HudBackgroundEnabled = new(P + nameof(HudBackgroundEnabled), true);
         public static readonly PrefFloat HudBackgroundOpacity = new(P + nameof(HudBackgroundOpacity), 1.0f);
         public static readonly PrefBool LiveMonitorVisible = new(P + nameof(LiveMonitorVisible), true);
+        public static readonly PrefFloat LiveMonitorOpacity = new(P + nameof(LiveMonitorOpacity), 0.4f);
 
         // "release -> back to center" (true) vs "release -> leave where it is" (false).
         public static readonly PrefBool ZoomSliderSnapsToCenter = new(P + nameof(ZoomSliderSnapsToCenter), true);
@@ -34,7 +35,6 @@ namespace CamLinkPro.Preferences
         public static readonly PrefBool DiagShowRotation = new(P + nameof(DiagShowRotation), true);
         public static readonly PrefBool DiagShowTracking = new(P + nameof(DiagShowTracking), true);
         public static readonly PrefBool DiagShowPackets = new(P + nameof(DiagShowPackets), true);
-        public static readonly PrefBool DiagShowArmed = new(P + nameof(DiagShowArmed), true);
         public static readonly PrefBool DiagShowCancelled = new(P + nameof(DiagShowCancelled), true);
         public static readonly PrefBool DiagShowRecordState = new(P + nameof(DiagShowRecordState), true);
 
