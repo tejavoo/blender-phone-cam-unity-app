@@ -183,11 +183,15 @@ namespace CamLinkPro.UI.Screens
             _manualEntryError.style.display = DisplayStyle.None;
 
             _probeChannel = new VideoCommandChannel(pairing.Ip, pairing.VideoPort, pairing.Token);
-            _probeChannel.StateChanged += state =>
-            {
-                if (state == ChannelState.Connected)
-                    OnProbeSucceeded(pairing);
-            };
+            // Deliberately NOT keyed off ChannelState.Connected: that fires
+            // the instant the raw TCP handshake completes, before the AUTH
+            // line is even sent, so a wrong token would still read as
+            // "success" right up until the server got around to dropping
+            // it. The addon only ever sends a line (STATE, on a client
+            // successfully joining) to a client whose AUTH it accepted, so
+            // waiting for any status line is what actually proves the
+            // pairing -- not just that the port was open.
+            _probeChannel.StatusLineReceived += _ => OnProbeSucceeded(pairing);
             _probeChannel.Error += _ => OnProbeFailed(pairing);
             _probeChannel.Start();
 
