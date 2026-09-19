@@ -51,6 +51,8 @@ namespace CamLinkPro.UI
 
         void Awake()
         {
+            PresetService.CaptureDefaultsIfMissing();
+
             var doc = GetComponent<UIDocument>();
             var panelSettings = Resources.Load<PanelSettings>("UI/AppPanelSettings");
             ApplyDensityScale(panelSettings);

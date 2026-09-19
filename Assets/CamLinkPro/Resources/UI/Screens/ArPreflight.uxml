@@ -1,9 +1,22 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
     <Style src="../Theme.uss" />
     <ui:VisualElement name="ArPreflightRoot" class="screen-root screen-root--vignette" style="align-items: center; justify-content: center;">
-        <ui:Label name="Spinner" text="&#9696;" class="text-display" style="color: rgb(74,144,255); margin-bottom: 20px;" />
+
+        <ui:VisualElement name="CameraIcon" style="align-items: center; margin-bottom: 28px;">
+            <ui:VisualElement name="CameraViewfinderBump" style="width: 22px; height: 10px; background-color: rgb(74,144,255); border-radius: 3px 3px 0 0;" />
+            <ui:VisualElement name="CameraBody" style="width: 84px; height: 50px; background-color: rgba(74,144,255,0.12); border-width: 3px; border-color: rgb(74,144,255); border-radius: 12px; align-items: center; justify-content: center;">
+                <ui:VisualElement name="CameraLensOuter" style="width: 30px; height: 30px; border-radius: 999px; border-width: 3px; border-color: rgb(74,144,255); align-items: center; justify-content: center;">
+                    <ui:VisualElement name="CameraLensInner" style="width: 14px; height: 14px; border-radius: 999px; background-color: rgb(74,144,255);" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
         <ui:Label text="Starting camera&#8230;" class="text-title" />
-        <ui:Label text="Initializing AR tracking" class="text-subtitle" style="margin-bottom: 28px;" />
+        <ui:Label text="Initializing AR tracking" class="text-subtitle" style="margin-bottom: 22px;" />
+
+        <ui:VisualElement name="LoadingBarTrack" style="width: 260px; height: 6px; background-color: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; margin-bottom: 28px;">
+            <ui:VisualElement name="LoadingBarFill" style="width: 90px; height: 6px; background-color: rgb(74,144,255); border-radius: 999px; position: absolute;" />
+        </ui:VisualElement>
 
         <ui:VisualElement name="BatteryRow" style="flex-direction: row; align-items: center; margin-bottom: 10px; display: none;">
             <ui:Label name="BatteryIcon" text="&#9679;" class="text-body" style="color: rgb(64,200,130); margin-right: 10px;" />

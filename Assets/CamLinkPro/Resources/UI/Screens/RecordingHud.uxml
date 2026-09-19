@@ -2,6 +2,8 @@
     <Style src="../Theme.uss" />
     <ui:VisualElement name="HudRoot" class="screen-root screen-root--vignette" style="padding: 24px;">
 
+        <ui:Image name="LiveMonitorImage" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: none;" picking-mode="Ignore" />
+
         <ui:VisualElement name="DisconnectBanner" style="background-color: rgb(74,18,20); padding: 14px; border-radius: 12px; display: none; margin-bottom: 10px;">
             <ui:Label text="&#9888; Blender disconnected" class="text-body" style="color: white; -unity-font-style: bold;" />
             <ui:VisualElement style="flex-direction: row; margin-top: 8px;">
@@ -16,15 +18,15 @@
             <ui:VisualElement name="StatusStrip" style="flex-direction: row;">
                 <ui:VisualElement class="status-pill">
                     <ui:Label name="LinkIcon" text="&#10003;" class="status-pill__icon status-pill__icon--lost" />
-                    <ui:Label name="LinkLabel" text="link" class="text-caption" />
+                    <ui:Label name="LinkLabel" text="connection" class="text-caption" />
                 </ui:VisualElement>
                 <ui:VisualElement class="status-pill">
                     <ui:Label name="BlenderIcon" text="!" class="status-pill__icon status-pill__icon--lost" />
-                    <ui:Label name="BlenderLabel" text="blender" class="text-caption" />
+                    <ui:Label name="BlenderLabel" text="stream" class="text-caption" />
                 </ui:VisualElement>
                 <ui:VisualElement class="status-pill">
                     <ui:Label name="PoseIcon" text="&#10003;" class="status-pill__icon status-pill__icon--lost" />
-                    <ui:Label name="PoseLabel" text="pose" class="text-caption" />
+                    <ui:Label name="PoseLabel" text="gyro" class="text-caption" />
                 </ui:VisualElement>
             </ui:VisualElement>
 
@@ -74,11 +76,13 @@
                     <ui:Label name="SteadyValue" text="0.0" class="text-caption" />
                 </ui:VisualElement>
                 <ui:Slider name="SteadySlider" low-value="0" high-value="1" style="margin-bottom: 6px;" />
-                <ui:VisualElement style="flex-direction: row; justify-content: space-between;">
-                    <ui:Label text="Opacity" class="text-caption" />
-                    <ui:Label name="OpacityValue" text="1.0" class="text-caption" />
+                <ui:VisualElement name="OpacityGroup">
+                    <ui:VisualElement style="flex-direction: row; justify-content: space-between;">
+                        <ui:Label text="Opacity" class="text-caption" />
+                        <ui:Label name="OpacityValue" text="1.0" class="text-caption" />
+                    </ui:VisualElement>
+                    <ui:Slider name="OpacitySlider" low-value="0" high-value="1" value="1" />
                 </ui:VisualElement>
-                <ui:Slider name="OpacitySlider" low-value="0" high-value="1" value="1" />
             </ui:VisualElement>
 
             <ui:VisualElement style="align-items: center;">
@@ -112,7 +116,7 @@
         <ui:VisualElement name="DiagnosticsOverlay" style="position: absolute; left: 24px; top: 130px; width: 460px; background-color: rgba(0,0,0,0.55); border-radius: 10px; padding: 0; display: none;">
             <ui:VisualElement name="DiagnosticsHeader" style="flex-direction: row; justify-content: space-between; align-items: center; padding: 6px 8px 6px 12px;">
                 <ui:Label text="Diagnostics &#8226; drag to move" class="text-micro" style="color: rgba(64,230,140,0.7);" />
-                <ui:Button name="DiagnosticsCloseButton" text="&#10005;" class="chip text-caption" style="width: 26px; height: 26px; padding: 0; margin-right: 0; -unity-text-align: middle-center;" />
+                <ui:Button name="DiagnosticsCloseButton" text="X" class="chip text-caption" style="width: 26px; height: 26px; padding: 0; margin-right: 0; -unity-text-align: middle-center;" />
             </ui:VisualElement>
             <ui:Label name="DiagnosticsText" text="waiting..." class="text-mono" style="color: rgb(64,230,140); white-space: normal; padding: 0 12px 10px 12px;" />
         </ui:VisualElement>

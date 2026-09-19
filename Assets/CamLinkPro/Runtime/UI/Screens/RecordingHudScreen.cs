@@ -32,6 +32,8 @@ namespace CamLinkPro.UI.Screens
         VisualElement _disconnectBanner;
         VisualElement _diagnosticsOverlay;
         Label _diagnosticsText;
+        Image _liveMonitorImage;
+        Texture2D _monitorTexture;
         bool _isRecording;
         bool _wasConnected = true;
         bool _poseActuallySending;
@@ -64,6 +66,7 @@ namespace CamLinkPro.UI.Screens
                 _channel = new VideoCommandChannel(pairing.Value.Ip, pairing.Value.VideoPort, pairing.Value.Token);
                 _channel.StateChanged += OnChannelStateChanged;
                 _channel.BlenderStateChanged += OnBlenderStateChanged;
+                _channel.FrameReceived += OnFrameReceived;
                 _channel.Start();
             }
 
@@ -100,6 +103,7 @@ namespace CamLinkPro.UI.Screens
             _disconnectBanner = root.Q("DisconnectBanner");
             _diagnosticsOverlay = root.Q("DiagnosticsOverlay");
             _diagnosticsText = root.Q<Label>("DiagnosticsText");
+            _liveMonitorImage = root.Q<Image>("LiveMonitorImage");
 
             _diagDrag = new DraggableOverlay(_diagnosticsOverlay, root.Q("DiagnosticsHeader"), root.Q("HudRoot"));
             _diagDrag.SetPosition(new Vector2(AppPrefs.DiagnosticsOverlayX.Value, AppPrefs.DiagnosticsOverlayY.Value));
@@ -140,7 +144,12 @@ namespace CamLinkPro.UI.Screens
 
             var opacitySlider = root.Q<Slider>("OpacitySlider");
             var opacityValue = root.Q<Label>("OpacityValue");
-            opacitySlider.RegisterValueChangedCallback(evt => opacityValue.text = evt.newValue.ToString("F1"));
+            _liveMonitorImage.style.opacity = opacitySlider.value;
+            opacitySlider.RegisterValueChangedCallback(evt =>
+            {
+                opacityValue.text = evt.newValue.ToString("F1");
+                _liveMonitorImage.style.opacity = evt.newValue;
+            });
 
             root.Q<Button>("ResetOriginButton").clicked += () =>
             {
@@ -192,6 +201,27 @@ namespace CamLinkPro.UI.Screens
             SetVisible("FreezeAxisRow", AppPrefs.FreezeAxisRowVisible.Value);
             SetVisible("BottomBar", AppPrefs.BottomControlBarVisible.Value);
             SetVisible("DiagnosticsOverlay", AppPrefs.DiagnosticsHudVisible.Value);
+            // Opacity only means anything relative to the live monitor image,
+            // so hide the slider along with it rather than leaving a control
+            // on screen that visibly does nothing.
+            SetVisible("OpacityGroup", AppPrefs.LiveMonitorVisible.Value);
+            RefreshLiveMonitorVisibility();
+        }
+
+        void OnFrameReceived(byte[] jpegBytes)
+        {
+            _monitorTexture ??= new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!_monitorTexture.LoadImage(jpegBytes))
+                return;
+
+            _liveMonitorImage.image = _monitorTexture;
+            RefreshLiveMonitorVisibility();
+        }
+
+        void RefreshLiveMonitorVisibility()
+        {
+            var visible = AppPrefs.LiveMonitorVisible.Value && _monitorTexture != null;
+            _liveMonitorImage.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         void SetVisible(string elementName, bool visible) =>
@@ -273,6 +303,7 @@ namespace CamLinkPro.UI.Screens
         {
             if (_isRecording)
                 return;
+            HapticFeedback.Trigger();
 
             var seconds = AppPrefs.RecordCountdownSeconds.Value;
             if (seconds <= 0f)
@@ -305,6 +336,7 @@ namespace CamLinkPro.UI.Screens
 
         void OnCountdownCancelClicked()
         {
+            HapticFeedback.Trigger();
             _countdownCancelled = true;
             _countdownToken++;
             _cancelledCountdowns++;
@@ -322,6 +354,7 @@ namespace CamLinkPro.UI.Screens
         {
             if (!_isRecording)
                 return;
+            HapticFeedback.Trigger();
 
             _isRecording = false;
             _recordStateLabel.text = "Idle";
@@ -338,7 +371,7 @@ namespace CamLinkPro.UI.Screens
 
         void OnChannelStateChanged(ChannelState state)
         {
-            SetPill("LinkIcon", "LinkLabel", "link", state switch
+            SetPill("LinkIcon", "LinkLabel", "connection", state switch
             {
                 ChannelState.Connected => PillLevel.Good,
                 ChannelState.Connecting => PillLevel.Degraded,
@@ -355,7 +388,7 @@ namespace CamLinkPro.UI.Screens
 
         void OnBlenderStateChanged(BlenderLiveState state)
         {
-            SetPill("BlenderIcon", "BlenderLabel", "blender", state switch
+            SetPill("BlenderIcon", "BlenderLabel", "stream", state switch
             {
                 BlenderLiveState.Live => PillLevel.Good,
                 BlenderLiveState.LiveNoData or BlenderLiveState.Connected => PillLevel.Degraded,
@@ -420,7 +453,7 @@ namespace CamLinkPro.UI.Screens
             if (_poseActuallySending != (tracking && _poseSender != null))
             {
                 _poseActuallySending = tracking && _poseSender != null;
-                SetPill("PoseIcon", "PoseLabel", "pose", _poseActuallySending ? PillLevel.Good : PillLevel.Lost);
+                SetPill("PoseIcon", "PoseLabel", "gyro", _poseActuallySending ? PillLevel.Good : PillLevel.Lost);
             }
 
             var camTransform = _shell.ArSession.CameraTransform;
@@ -492,6 +525,8 @@ namespace CamLinkPro.UI.Screens
             _tickItem?.Pause();
             _channel?.Dispose();
             _poseSender?.Dispose();
+            if (_monitorTexture != null)
+                Object.Destroy(_monitorTexture);
         }
     }
 }

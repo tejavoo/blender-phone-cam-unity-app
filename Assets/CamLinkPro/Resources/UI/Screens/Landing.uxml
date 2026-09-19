@@ -6,7 +6,7 @@
             <ui:Label name="Title" text="Cam Link Pro" class="text-display" />
             <ui:VisualElement style="flex-direction: row; align-items: center; margin-top: 8px;">
                 <ui:Label text="Made with" class="text-subtitle" />
-                <ui:Label name="HeartIcon" text="&#10084;" class="text-subtitle" style="margin: 0 6px;" />
+                <ui:Label name="HeartIcon" text="&#10084;" class="text-subtitle" style="margin: 0 6px; color: rgb(224, 60, 70);" />
                 <ui:Label text="by" class="text-subtitle" style="margin-right: 6px;" />
                 <ui:Label name="CreditLink" text="Teja" class="text-subtitle link-text" />
             </ui:VisualElement>

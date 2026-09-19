@@ -24,6 +24,7 @@ namespace CamLinkPro.Preferences
         public static readonly PrefBool SafeAreaEnabled = new(P + nameof(SafeAreaEnabled), true);
         public static readonly PrefBool HudBackgroundEnabled = new(P + nameof(HudBackgroundEnabled), true);
         public static readonly PrefFloat HudBackgroundOpacity = new(P + nameof(HudBackgroundOpacity), 1.0f);
+        public static readonly PrefBool LiveMonitorVisible = new(P + nameof(LiveMonitorVisible), true);
 
         // "release -> back to center" (true) vs "release -> leave where it is" (false).
         public static readonly PrefBool ZoomSliderSnapsToCenter = new(P + nameof(ZoomSliderSnapsToCenter), true);

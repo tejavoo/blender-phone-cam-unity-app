@@ -143,12 +143,16 @@
 .text-mono { font-size: 14px; color: rgb(210, 207, 202); letter-spacing: 0.5px; }
 
 /* Inline clickable text (not a button) — signals "this is a link" via
-   color + weight alone, since UI Toolkit has no reliable underline. Placed
-   after the text-role rules above so it wins the same-specificity cascade
-   when combined with e.g. .text-subtitle on the same element. */
+   color + weight + an underline (a bottom border, since UI Toolkit has no
+   text-decoration property). Placed after the text-role rules above so it
+   wins the same-specificity cascade when combined with e.g. .text-subtitle
+   on the same element. */
 .link-text {
     color: rgb(74, 144, 255);
     -unity-font-style: bold;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(74, 144, 255, 0.55);
+    padding-bottom: 1px;
 }
 
 /* Base UI Toolkit controls default to editor-theme colors; restate for dark runtime UI. */
@@ -231,7 +235,30 @@ Slider > .unity-base-slider__dragger {
     left: -11px;
 }
 
-DropdownField {
-    background-color: rgb(30, 28, 26);
+/* Unity's built-in runtime theme styles .unity-base-popup-field with a
+   light editor-theme background and near-black text — a class selector,
+   which beats a plain `DropdownField` type selector on specificity, so the
+   override has to target the same class (and !important, since the
+   built-in rule also carries a pseudo-class qualifier we'd otherwise have
+   to out-specify one by one). Without this the selected value is all but
+   invisible against this app's dark theme. */
+DropdownField .unity-base-popup-field,
+DropdownField .unity-base-popup-field__input {
+    background-color: rgb(30, 28, 26) !important;
+    background-image: none !important;
     border-radius: 8px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+DropdownField > .unity-base-field__label {
+    color: rgb(170, 167, 162);
+}
+
+DropdownField .unity-base-popup-field__text {
+    color: rgb(220, 217, 213) !important;
+}
+
+DropdownField .unity-base-popup-field__arrow {
+    -unity-background-image-tint-color: rgb(170, 167, 162);
 }

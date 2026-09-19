@@ -21,6 +21,13 @@ namespace CamLinkPro.UI.Screens
 
         PairingInfo? _currentPairing;
 
+        Button _connectButton;
+        VideoCommandChannel _probeChannel;
+        IVisualElementScheduledItem _probeTickItem;
+        IVisualElementScheduledItem _probeTimeoutItem;
+        bool _probeResolved;
+        const int ProbeTimeoutMs = 4000;
+
         IVisualElementScheduledItem _heartTick;
         float _heartStartTime;
         const float HeartBeatPeriod = 1.1f;
@@ -42,10 +49,12 @@ namespace CamLinkPro.UI.Screens
             _pairedSubline = root.Q<Label>("PairedSubline");
             _letsRecordButton = root.Q<Button>("LetsRecordButton");
 
+            _connectButton = root.Q<Button>("ConnectButton");
+
             root.Q<Button>("ScanQrButton").clicked += () => _shell.Navigate(ScreenId.ScanQr);
             root.Q<Button>("EnterManuallyLink").clicked += () => OpenModal(prefill: null);
             root.Q<Button>("ModalCancelButton").clicked += CloseModal;
-            root.Q<Button>("ConnectButton").clicked += OnConnectClicked;
+            _connectButton.clicked += OnConnectClicked;
             root.Q<Button>("RepairLink").clicked += () => SetPaired(null);
             root.Q<Button>("SettingsButton").clicked += () =>
             {
@@ -110,7 +119,11 @@ namespace CamLinkPro.UI.Screens
             OpenModal(pairing);
         }
 
-        public void Unmount() => _heartTick?.Pause();
+        public void Unmount()
+        {
+            _heartTick?.Pause();
+            AbortProbe();
+        }
 
         void OpenModal(PairingInfo? prefill)
         {
@@ -118,13 +131,23 @@ namespace CamLinkPro.UI.Screens
             _manualEntryError.style.display = DisplayStyle.None;
             _root.Q("QrScanConfirmation").style.display = prefill.HasValue ? DisplayStyle.Flex : DisplayStyle.None;
 
-            _root.Q<TextField>("IpField").value = prefill?.Ip ?? _currentPairing?.Ip ?? "";
-            _root.Q<TextField>("PosePortField").value = (prefill?.PosePort ?? _currentPairing?.PosePort)?.ToString() ?? "";
-            _root.Q<TextField>("VideoPortField").value = (prefill?.VideoPort ?? _currentPairing?.VideoPort)?.ToString() ?? "";
-            _root.Q<TextField>("TokenField").value = prefill?.Token ?? _currentPairing?.Token ?? "";
+            // Falls back to the last successfully-connected pairing on disk
+            // (not just _currentPairing) so "Enter Manually" still shows the
+            // last recorded values after Re-pair has cleared the in-memory
+            // paired state.
+            var lastRecorded = _currentPairing ?? PairingStore.LoadLastUsed();
+
+            _root.Q<TextField>("IpField").value = prefill?.Ip ?? lastRecorded?.Ip ?? "";
+            _root.Q<TextField>("PosePortField").value = (prefill?.PosePort ?? lastRecorded?.PosePort)?.ToString() ?? "";
+            _root.Q<TextField>("VideoPortField").value = (prefill?.VideoPort ?? lastRecorded?.VideoPort)?.ToString() ?? "";
+            _root.Q<TextField>("TokenField").value = prefill?.Token ?? lastRecorded?.Token ?? "";
         }
 
-        void CloseModal() => _manualEntryModal.style.display = DisplayStyle.None;
+        void CloseModal()
+        {
+            _manualEntryModal.style.display = DisplayStyle.None;
+            AbortProbe();
+        }
 
         void OnConnectClicked()
         {
@@ -146,10 +169,69 @@ namespace CamLinkPro.UI.Screens
                 return;
             }
 
+            StartConnectionProbe(pairing);
+        }
+
+        /// Actually attempts to reach the endpoint (a real TCP connect, not
+        /// just "do the fields look well-formed") before ever showing
+        /// "Connected" — a plain field-validity check let a wrong/unreachable
+        /// IP report success, which was the whole bug.
+        void StartConnectionProbe(PairingInfo pairing)
+        {
+            AbortProbe();
+            _probeResolved = false;
+
+            _connectButton.SetEnabled(false);
+            _connectButton.text = "Connecting…";
+            _manualEntryError.style.display = DisplayStyle.None;
+
+            _probeChannel = new VideoCommandChannel(pairing.Ip, pairing.VideoPort, pairing.Token);
+            _probeChannel.StateChanged += state =>
+            {
+                if (state == ChannelState.Connected)
+                    OnProbeSucceeded(pairing);
+            };
+            _probeChannel.Error += _ => OnProbeFailed(pairing);
+            _probeChannel.Start();
+
+            _probeTickItem = _root.schedule.Execute(() => _probeChannel?.Pump()).Every(16);
+            _probeTimeoutItem = _root.schedule.Execute(() => OnProbeFailed(pairing)).StartingIn(ProbeTimeoutMs);
+        }
+
+        void OnProbeSucceeded(PairingInfo pairing)
+        {
+            if (_probeResolved)
+                return;
+            _probeResolved = true;
+            AbortProbe();
+
             CloseModal();
             PairingStore.SaveLastUsed(pairing);
             SetPaired(pairing);
             RefreshRecentChips();
+        }
+
+        void OnProbeFailed(PairingInfo pairing)
+        {
+            if (_probeResolved)
+                return;
+            _probeResolved = true;
+            AbortProbe();
+
+            ShowManualEntryError($"Could not reach {pairing.Ip}:{pairing.VideoPort} — check the details and try again");
+        }
+
+        /// Stops and discards any in-flight connection probe (a fresh one is
+        /// created per attempt) and restores the Connect button.
+        void AbortProbe()
+        {
+            _probeTickItem?.Pause();
+            _probeTimeoutItem?.Pause();
+            _probeChannel?.Dispose();
+            _probeChannel = null;
+
+            _connectButton.SetEnabled(true);
+            _connectButton.text = "Connect";
         }
 
         void ShowManualEntryError(string message)
@@ -181,7 +263,14 @@ namespace CamLinkPro.UI.Screens
             _recentChips.Clear();
             foreach (var pairing in PairingStore.LoadHistory())
             {
-                var chip = new Button(() => { PairingStore.SaveLastUsed(pairing); SetPaired(pairing); })
+                var chip = new Button(() =>
+                {
+                    // Route through the same verified-connect path as manual
+                    // entry — a stale recent pairing might not be reachable
+                    // any more, and the modal is where that gets surfaced.
+                    OpenModal(pairing);
+                    StartConnectionProbe(pairing);
+                })
                 {
                     text = $"{pairing.Ip}:{pairing.VideoPort}"
                 };

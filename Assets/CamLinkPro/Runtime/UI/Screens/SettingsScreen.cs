@@ -47,6 +47,7 @@ namespace CamLinkPro.UI.Screens
             WireConnectionTab();
             WireCameraTab();
             WireDiagnosticsTab();
+            WirePresetsModal();
         }
 
         public void Unmount() { }
@@ -206,15 +207,15 @@ namespace CamLinkPro.UI.Screens
 
             _root.Q<Label>("SensorWidthReadout").text = ZoomState.SensorWidthMm.ToString("F1");
 
-            var releaseToggle = _root.Q<Toggle>("ZoomSliderReleaseToggle");
-            releaseToggle.value = AppPrefs.ZoomSliderSnapsToCenter.Value;
-            UpdateZoomReleaseLabel(releaseToggle);
-            releaseToggle.RegisterValueChangedCallback(evt =>
-            {
-                AppPrefs.ZoomSliderSnapsToCenter.Value = evt.newValue;
-                UpdateZoomReleaseLabel(releaseToggle);
-            });
+            const string BackToCenter = "Back to Center";
+            const string LeaveWhereReleased = "Leave Where Released";
+            var releaseDropdown = _root.Q<DropdownField>("ZoomSliderReleaseDropdown");
+            releaseDropdown.choices = new List<string> { BackToCenter, LeaveWhereReleased };
+            releaseDropdown.value = AppPrefs.ZoomSliderSnapsToCenter.Value ? BackToCenter : LeaveWhereReleased;
+            releaseDropdown.RegisterValueChangedCallback(evt =>
+                AppPrefs.ZoomSliderSnapsToCenter.Value = evt.newValue == BackToCenter);
 
+            BindToggle("LiveMonitorVisibleToggle", AppPrefs.LiveMonitorVisible);
             BindToggle("HudBackgroundToggle", AppPrefs.HudBackgroundEnabled);
             var opacitySlider = _root.Q<Slider>("HudBackgroundOpacitySlider");
             var opacityValue = _root.Q<Label>("HudBackgroundOpacityValue");
@@ -227,9 +228,6 @@ namespace CamLinkPro.UI.Screens
             });
         }
 
-        static void UpdateZoomReleaseLabel(Toggle toggle) =>
-            toggle.label = toggle.value ? "Release: Back to Center" : "Release: Leave Where It Is";
-
         void WireDiagnosticsTab()
         {
             BindToggle("DiagVisibleToggle", AppPrefs.DiagnosticsHudVisible);
@@ -240,6 +238,57 @@ namespace CamLinkPro.UI.Screens
             BindToggle("DiagShowArmedToggle", AppPrefs.DiagShowArmed);
             BindToggle("DiagShowCancelledToggle", AppPrefs.DiagShowCancelled);
             BindToggle("DiagShowRecordStateToggle", AppPrefs.DiagShowRecordState);
+        }
+
+        void WirePresetsModal()
+        {
+            var modal = _root.Q("PresetsModal");
+            _root.Q<Button>("OpenPresetsButton").clicked += () =>
+            {
+                RefreshPresetSlots();
+                modal.style.display = DisplayStyle.Flex;
+            };
+            _root.Q<Button>("PresetsCloseButton").clicked += () => modal.style.display = DisplayStyle.None;
+
+            _root.Q<Button>("PresetRestoreDefaultsButton").clicked += () =>
+            {
+                PresetService.RestoreDefaults();
+                // Simplest way to get every tab's controls to reflect the
+                // restored values is to remount the whole screen fresh.
+                _shell.Navigate(ScreenId.SettingsGeneral);
+            };
+
+            for (var i = 0; i < PresetService.CustomSlotCount; i++)
+            {
+                var slot = i;
+                var nameField = _root.Q<TextField>($"PresetName{slot}");
+                nameField.RegisterValueChangedCallback(evt => PresetService.SetSlotName(slot, evt.newValue));
+
+                _root.Q<Button>($"PresetSave{slot}").clicked += () =>
+                {
+                    PresetService.SetSlotName(slot, nameField.value);
+                    PresetService.SaveToSlot(slot);
+                    RefreshPresetSlots();
+                };
+                _root.Q<Button>($"PresetLoad{slot}").clicked += () =>
+                {
+                    if (!PresetService.HasCustomSlot(slot))
+                        return;
+                    PresetService.LoadFromSlot(slot);
+                    _shell.Navigate(ScreenId.SettingsGeneral);
+                };
+            }
+
+            RefreshPresetSlots();
+        }
+
+        void RefreshPresetSlots()
+        {
+            for (var i = 0; i < PresetService.CustomSlotCount; i++)
+            {
+                _root.Q<TextField>($"PresetName{i}").SetValueWithoutNotify(PresetService.GetSlotName(i));
+                _root.Q<Button>($"PresetLoad{i}").SetEnabled(PresetService.HasCustomSlot(i));
+            }
         }
 
         void BindToggle(string name, PrefBool pref)

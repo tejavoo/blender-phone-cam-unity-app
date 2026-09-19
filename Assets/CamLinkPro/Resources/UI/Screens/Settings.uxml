@@ -19,6 +19,14 @@
         <ui:ScrollView name="TabContent" style="flex-grow: 1;">
 
             <ui:VisualElement name="PanelGeneral" class="card">
+                <ui:VisualElement style="flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom-width: 1px; border-bottom-color: rgba(255,255,255,0.08);">
+                    <ui:VisualElement style="flex-shrink: 1;">
+                        <ui:Label text="Presets" class="text-body" style="-unity-font-style: bold;" />
+                        <ui:Label text="Restore the defaults, or save/load up to 3 of your own" class="text-micro" style="white-space: normal;" />
+                    </ui:VisualElement>
+                    <ui:Button name="OpenPresetsButton" text="Presets" class="button-secondary text-body" />
+                </ui:VisualElement>
+
                 <ui:Label text="Text Size" class="text-title" style="margin-bottom: 12px;" />
                 <ui:Slider name="TextSizeSlider" low-value="0.9" high-value="1.1" value="1.0" />
                 <ui:Label name="TextSizeSample" text="Sample text at current size" class="text-body" style="margin-top: 10px; margin-bottom: 20px;" />
@@ -96,7 +104,7 @@
             <ui:VisualElement name="PanelCamera" class="card" style="display: none;">
                 <ui:Toggle name="ZoomSliderVisibleToggle" label="Zoom Slider Visibility" class="text-body" style="margin-bottom: 8px;" />
                 <ui:TextField name="ZoomSensitivityField" label="Zoom Slider Sensitivity" class="text-body" style="margin-bottom: 8px;" />
-                <ui:Toggle name="ZoomSliderReleaseToggle" label="Release: Back to Center" class="text-body" />
+                <ui:DropdownField name="ZoomSliderReleaseDropdown" label="Zoom Slider Release" class="text-body" />
 
                 <ui:Label text="HUD Background" class="text-title" style="margin-top: 16px; margin-bottom: 4px;" />
                 <ui:Label text="Turn off to show only the buttons/controls over the live camera feed" class="text-micro" style="margin-bottom: 8px; white-space: normal;" />
@@ -106,6 +114,10 @@
                     <ui:Label name="HudBackgroundOpacityValue" text="1.0" class="text-caption" />
                 </ui:VisualElement>
                 <ui:Slider name="HudBackgroundOpacitySlider" low-value="0" high-value="1" value="1" />
+
+                <ui:Label text="Live Monitor" class="text-title" style="margin-top: 16px; margin-bottom: 4px;" />
+                <ui:Label text="Shows Blender's rendered camera feed composited on the Recording screen. Turning this off also hides that screen's Opacity slider, since it only controls how strongly the monitor image blends in." class="text-micro" style="margin-bottom: 8px; white-space: normal;" />
+                <ui:Toggle name="LiveMonitorVisibleToggle" label="Show Live Monitor" class="text-body" />
 
                 <ui:Label text="Blender Camera" class="text-title" style="margin-top: 16px; margin-bottom: 8px;" />
                 <ui:Label name="BlenderCameraStatus" text="-- (no live pose yet)" class="text-body" style="margin-bottom: 10px;" />
@@ -132,5 +144,39 @@
             </ui:VisualElement>
 
         </ui:ScrollView>
+
+        <ui:VisualElement name="PresetsModal" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.6); display: none;">
+            <ui:VisualElement class="card" style="width: 480px; background-color: rgb(22,20,19);">
+                <ui:Label text="Presets" class="text-title" style="margin-bottom: 4px;" />
+                <ui:Label text="Presets capture every setting on this screen — Calibration, App, Camera and Diagnostics — but not your Blender connection details." class="text-micro" style="margin-bottom: 16px; white-space: normal;" />
+
+                <ui:VisualElement style="flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 16px; border-bottom-width: 1px; border-bottom-color: rgba(255,255,255,0.08);">
+                    <ui:VisualElement style="flex-shrink: 1;">
+                        <ui:Label text="Defaults" class="text-body" style="-unity-font-style: bold;" />
+                        <ui:Label text="Recommended — how the app was set up before you changed anything" class="text-micro" style="white-space: normal;" />
+                    </ui:VisualElement>
+                    <ui:Button name="PresetRestoreDefaultsButton" text="Restore" class="button-secondary text-caption" />
+                </ui:VisualElement>
+
+                <ui:VisualElement name="PresetSlot0" style="flex-direction: row; align-items: center; margin-bottom: 10px;">
+                    <ui:TextField name="PresetName0" value="Preset 1" class="text-body" style="flex-grow: 1; margin-right: 8px;" />
+                    <ui:Button name="PresetSave0" text="Save" class="button-secondary text-caption" style="margin-right: 6px;" />
+                    <ui:Button name="PresetLoad0" text="Load" class="button-secondary text-caption" />
+                </ui:VisualElement>
+                <ui:VisualElement name="PresetSlot1" style="flex-direction: row; align-items: center; margin-bottom: 10px;">
+                    <ui:TextField name="PresetName1" value="Preset 2" class="text-body" style="flex-grow: 1; margin-right: 8px;" />
+                    <ui:Button name="PresetSave1" text="Save" class="button-secondary text-caption" style="margin-right: 6px;" />
+                    <ui:Button name="PresetLoad1" text="Load" class="button-secondary text-caption" />
+                </ui:VisualElement>
+                <ui:VisualElement name="PresetSlot2" style="flex-direction: row; align-items: center; margin-bottom: 20px;">
+                    <ui:TextField name="PresetName2" value="Preset 3" class="text-body" style="flex-grow: 1; margin-right: 8px;" />
+                    <ui:Button name="PresetSave2" text="Save" class="button-secondary text-caption" style="margin-right: 6px;" />
+                    <ui:Button name="PresetLoad2" text="Load" class="button-secondary text-caption" />
+                </ui:VisualElement>
+
+                <ui:Button name="PresetsCloseButton" text="Close" class="button-secondary text-body" style="width: 100%; -unity-text-align: middle-center;" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
     </ui:VisualElement>
 </ui:UXML>
