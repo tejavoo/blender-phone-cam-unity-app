@@ -4,7 +4,12 @@
 
         <ui:VisualElement name="Header" style="align-items: center; margin-top: 48px;">
             <ui:Label name="Title" text="Cam Link Pro" class="text-display" />
-            <ui:Label name="Subtitle" text="Made with &#10084; by Teja" class="text-subtitle" style="margin-top: 8px;" />
+            <ui:VisualElement style="flex-direction: row; align-items: center; margin-top: 8px;">
+                <ui:Label text="Made with" class="text-subtitle" />
+                <ui:Label name="HeartIcon" text="&#10084;" class="text-subtitle" style="margin: 0 6px;" />
+                <ui:Label text="by" class="text-subtitle" style="margin-right: 6px;" />
+                <ui:Label name="CreditLink" text="Teja" class="text-subtitle link-text" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
         <ui:VisualElement name="WifiWarning" class="card" style="background-color: rgba(138,44,48,0.9); display: none; margin-bottom: 16px;">
@@ -52,6 +57,15 @@
                     <ui:Button name="ModalCancelButton" text="Cancel" class="button-secondary text-body" style="flex-grow: 1; margin-right: 10px; -unity-text-align: middle-center;" />
                     <ui:Button name="ConnectButton" text="Connect" class="button-primary text-body" style="flex-grow: 1; -unity-text-align: middle-center;" />
                 </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="AboutModal" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.6); display: none;">
+            <ui:VisualElement class="card" style="width: 420px; background-color: rgb(22,20,19); align-items: center;">
+                <ui:Label text="Made by Teja" class="text-title" style="margin-bottom: 12px;" />
+                <ui:Label name="AboutGithubLink" text="github.com/tejavoo" class="text-body link-text" style="margin-bottom: 16px;" />
+                <ui:Label text="Thanks for using Cam Link Pro! If it's useful to you, a star on GitHub means a lot. Run into a bug or have an idea for a feature? Open an issue on the repo — I check it regularly and I'm happy to help." class="text-caption" style="white-space: normal; -unity-text-align: upper-center; margin-bottom: 20px;" />
+                <ui:Button name="AboutCloseButton" text="Close" class="button-secondary text-body" style="width: 100%; -unity-text-align: middle-center;" />
             </ui:VisualElement>
         </ui:VisualElement>
 

@@ -13,12 +13,19 @@ namespace CamLinkPro.UI.Screens
         VisualElement _unpairedGroup;
         VisualElement _pairedGroup;
         VisualElement _manualEntryModal;
+        VisualElement _aboutModal;
         VisualElement _recentChips;
         Label _manualEntryError;
         Label _pairedSubline;
         Button _letsRecordButton;
 
         PairingInfo? _currentPairing;
+
+        IVisualElementScheduledItem _heartTick;
+        float _heartStartTime;
+        const float HeartBeatPeriod = 1.1f;
+        const float HeartFlipPeriod = 4.0f;
+        const string GitHubUrl = "https://github.com/tejavoo";
 
         public void Mount(VisualElement root, AppShell shell)
         {
@@ -29,6 +36,7 @@ namespace CamLinkPro.UI.Screens
             _unpairedGroup = root.Q("UnpairedGroup");
             _pairedGroup = root.Q("PairedGroup");
             _manualEntryModal = root.Q("ManualEntryModal");
+            _aboutModal = root.Q("AboutModal");
             _recentChips = root.Q("RecentChips");
             _manualEntryError = root.Q<Label>("ManualEntryError");
             _pairedSubline = root.Q<Label>("PairedSubline");
@@ -46,11 +54,50 @@ namespace CamLinkPro.UI.Screens
             };
             _letsRecordButton.clicked += OnLetsRecordClicked;
 
+            var creditLink = root.Q<Label>("CreditLink");
+            creditLink.pickingMode = PickingMode.Position;
+            creditLink.RegisterCallback<PointerUpEvent>(_ => _aboutModal.style.display = DisplayStyle.Flex);
+
+            var githubLink = root.Q<Label>("AboutGithubLink");
+            githubLink.pickingMode = PickingMode.Position;
+            githubLink.RegisterCallback<PointerUpEvent>(_ => Application.OpenURL(GitHubUrl));
+
+            root.Q<Button>("AboutCloseButton").clicked += () => _aboutModal.style.display = DisplayStyle.None;
+
+            var heart = root.Q<Label>("HeartIcon");
+            heart.style.transformOrigin = new TransformOrigin(Length.Percent(50), Length.Percent(50));
+            _heartStartTime = Time.unscaledTime;
+            _heartTick = root.schedule.Execute(() => AnimateHeart(heart)).Every(16);
+
             _currentPairing = PairingStore.LoadLastUsed();
             SetPaired(_currentPairing);
             RefreshRecentChips();
             RefreshWifiWarning();
             ConsumePendingScan();
+        }
+
+        /// Pulses like a heartbeat (a quick "lub" thump followed by a softer
+        /// "dub") while slowly spinning around its own vertical axis. The
+        /// spin is a horizontal-flip illusion (scaleX crossing zero) rather
+        /// than a true 3D rotation, since this is a flat UI Toolkit label.
+        void AnimateHeart(VisualElement heart)
+        {
+            var t = Time.unscaledTime - _heartStartTime;
+
+            var cycle = (t % HeartBeatPeriod) / HeartBeatPeriod;
+            var lub = GaussianPulse(cycle, 0.00f, 0.10f);
+            var dub = GaussianPulse(cycle, 0.16f, 0.12f) * 0.7f;
+            var beatScale = 1f + Mathf.Max(lub, dub) * 0.3f;
+
+            var flip = Mathf.Cos(t / HeartFlipPeriod * Mathf.PI * 2f);
+
+            heart.style.scale = new Scale(new Vector2(flip * beatScale, beatScale));
+        }
+
+        static float GaussianPulse(float cycle, float center, float width)
+        {
+            var d = (cycle - center) / width;
+            return Mathf.Exp(-d * d * 4f);
         }
 
         void ConsumePendingScan()
@@ -63,7 +110,7 @@ namespace CamLinkPro.UI.Screens
             OpenModal(pairing);
         }
 
-        public void Unmount() { }
+        public void Unmount() => _heartTick?.Pause();
 
         void OpenModal(PairingInfo? prefill)
         {

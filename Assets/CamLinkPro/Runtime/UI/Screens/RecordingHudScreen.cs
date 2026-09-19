@@ -20,6 +20,7 @@ namespace CamLinkPro.UI.Screens
         IVisualElementScheduledItem _tickItem;
         readonly PosePipeline _pipeline = new();
         VerticalDragControl _zoomRail;
+        DraggableOverlay _diagDrag;
 
         Label _recordStateLabel;
         Label _zoomLabel;
@@ -99,6 +100,19 @@ namespace CamLinkPro.UI.Screens
             _disconnectBanner = root.Q("DisconnectBanner");
             _diagnosticsOverlay = root.Q("DiagnosticsOverlay");
             _diagnosticsText = root.Q<Label>("DiagnosticsText");
+
+            _diagDrag = new DraggableOverlay(_diagnosticsOverlay, root.Q("DiagnosticsHeader"), root.Q("HudRoot"));
+            _diagDrag.SetPosition(new Vector2(AppPrefs.DiagnosticsOverlayX.Value, AppPrefs.DiagnosticsOverlayY.Value));
+            _diagDrag.Released += pos =>
+            {
+                AppPrefs.DiagnosticsOverlayX.Value = pos.x;
+                AppPrefs.DiagnosticsOverlayY.Value = pos.y;
+            };
+            root.Q<Button>("DiagnosticsCloseButton").clicked += () =>
+            {
+                AppPrefs.DiagnosticsHudVisible.Value = false;
+                _diagnosticsOverlay.style.display = DisplayStyle.None;
+            };
 
             root.Q<Button>("RecordButton").clicked += OnRecordClicked;
             root.Q<Button>("StopButton").clicked += OnStopClicked;

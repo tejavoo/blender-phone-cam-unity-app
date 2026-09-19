@@ -122,7 +122,6 @@ namespace CamLinkPro.UI.Screens
 
         void WireAppTab()
         {
-            BindToggle("DiagnosticsOverlayToggle", AppPrefs.DiagnosticsOverlayEnabled);
             BindToggle("KeepScreenAwakeToggle", AppPrefs.KeepScreenAwake);
             BindToggle("ZoomSliderToggle", AppPrefs.ZoomSliderEnabled);
 

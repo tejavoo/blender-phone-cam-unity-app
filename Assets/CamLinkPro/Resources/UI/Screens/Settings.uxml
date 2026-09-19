@@ -68,7 +68,6 @@
             </ui:VisualElement>
 
             <ui:VisualElement name="PanelApp" class="card" style="display: none;">
-                <ui:Toggle name="DiagnosticsOverlayToggle" label="Diagnostics Overlay" class="text-body" style="margin-bottom: 8px;" />
                 <ui:Toggle name="KeepScreenAwakeToggle" label="Keep Screen Awake" class="text-body" style="margin-bottom: 8px;" />
                 <ui:Toggle name="ZoomSliderToggle" label="Zoom Slider" class="text-body" style="margin-bottom: 8px;" />
                 <ui:Toggle name="SafeAreaToggle" label="Safe Area" class="text-body" style="margin-bottom: 8px;" />

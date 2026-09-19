@@ -109,8 +109,12 @@
             <ui:Button name="CountdownCancelButton" text="Cancel" class="button-secondary text-body" style="-unity-text-align: middle-center;" />
         </ui:VisualElement>
 
-        <ui:VisualElement name="DiagnosticsOverlay" style="position: absolute; left: 24px; top: 130px; width: 460px; background-color: rgba(0,0,0,0.55); border-radius: 10px; padding: 10px 12px; display: none;">
-            <ui:Label name="DiagnosticsText" text="waiting..." class="text-mono" style="color: rgb(64,230,140); white-space: normal;" />
+        <ui:VisualElement name="DiagnosticsOverlay" style="position: absolute; left: 24px; top: 130px; width: 460px; background-color: rgba(0,0,0,0.55); border-radius: 10px; padding: 0; display: none;">
+            <ui:VisualElement name="DiagnosticsHeader" style="flex-direction: row; justify-content: space-between; align-items: center; padding: 6px 8px 6px 12px;">
+                <ui:Label text="Diagnostics &#8226; drag to move" class="text-micro" style="color: rgba(64,230,140,0.7);" />
+                <ui:Button name="DiagnosticsCloseButton" text="&#10005;" class="chip text-caption" style="width: 26px; height: 26px; padding: 0; margin-right: 0; -unity-text-align: middle-center;" />
+            </ui:VisualElement>
+            <ui:Label name="DiagnosticsText" text="waiting..." class="text-mono" style="color: rgb(64,230,140); white-space: normal; padding: 0 12px 10px 12px;" />
         </ui:VisualElement>
 
         <ui:VisualElement name="SavedToast" class="terminal-readout" style="position: absolute; bottom: 110px; left: 50%; display: none;">

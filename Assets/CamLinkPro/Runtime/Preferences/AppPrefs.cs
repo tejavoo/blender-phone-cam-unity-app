@@ -8,7 +8,6 @@ namespace CamLinkPro.Preferences
     {
         const string P = "CamLinkPro.Prefs.";
 
-        public static readonly PrefBool DiagnosticsOverlayEnabled = new(P + nameof(DiagnosticsOverlayEnabled), false);
         public static readonly PrefBool KeepScreenAwake = new(P + nameof(KeepScreenAwake), true);
         public static readonly PrefBool ZoomSliderEnabled = new(P + nameof(ZoomSliderEnabled), false);
         public static readonly PrefFloat RecordCountdownSeconds = new(P + nameof(RecordCountdownSeconds), 2.0f);
@@ -37,5 +36,10 @@ namespace CamLinkPro.Preferences
         public static readonly PrefBool DiagShowArmed = new(P + nameof(DiagShowArmed), true);
         public static readonly PrefBool DiagShowCancelled = new(P + nameof(DiagShowCancelled), true);
         public static readonly PrefBool DiagShowRecordState = new(P + nameof(DiagShowRecordState), true);
+
+        // Remembers where the user dragged the diagnostics overlay to, so it
+        // doesn't jump back to the default corner every session.
+        public static readonly PrefFloat DiagnosticsOverlayX = new(P + nameof(DiagnosticsOverlayX), 24f);
+        public static readonly PrefFloat DiagnosticsOverlayY = new(P + nameof(DiagnosticsOverlayY), 130f);
     }
 }

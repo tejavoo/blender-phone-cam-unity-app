@@ -142,6 +142,15 @@
 .text-micro { font-size: 11px; color: rgb(140, 137, 132); }
 .text-mono { font-size: 14px; color: rgb(210, 207, 202); letter-spacing: 0.5px; }
 
+/* Inline clickable text (not a button) — signals "this is a link" via
+   color + weight alone, since UI Toolkit has no reliable underline. Placed
+   after the text-role rules above so it wins the same-specificity cascade
+   when combined with e.g. .text-subtitle on the same element. */
+.link-text {
+    color: rgb(74, 144, 255);
+    -unity-font-style: bold;
+}
+
 /* Base UI Toolkit controls default to editor-theme colors; restate for dark runtime UI. */
 Label {
     color: rgb(220, 217, 213);
