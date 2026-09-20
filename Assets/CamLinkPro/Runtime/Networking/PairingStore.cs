@@ -30,5 +30,18 @@ namespace CamLinkPro.Networking
             PlayerPrefs.SetString(LastUsedPrefix + "Token", pairing.Token);
             PlayerPrefs.Save();
         }
+
+        /// Wipes the saved pairing outright (Unpair) -- unlike Re-pair, which
+        /// just reopens "Enter Manually" prefilled with these same values,
+        /// this is for when the values themselves are stale/wrong and
+        /// shouldn't keep coming back as the default next time.
+        public static void Clear()
+        {
+            PlayerPrefs.DeleteKey(LastUsedPrefix + "Ip");
+            PlayerPrefs.DeleteKey(LastUsedPrefix + "PosePort");
+            PlayerPrefs.DeleteKey(LastUsedPrefix + "VideoPort");
+            PlayerPrefs.DeleteKey(LastUsedPrefix + "Token");
+            PlayerPrefs.Save();
+        }
     }
 }

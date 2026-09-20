@@ -54,6 +54,7 @@ namespace CamLinkPro.UI.Screens
             root.Q<Button>("ModalCancelButton").clicked += CloseModal;
             _connectButton.clicked += OnConnectClicked;
             root.Q<Button>("RepairLink").clicked += () => SetPaired(null);
+            root.Q<Button>("UnpairLink").clicked += OnUnpairClicked;
             root.Q<Button>("SettingsButton").clicked += () =>
             {
                 _shell.SettingsReturnTo = ScreenId.Landing;
@@ -238,6 +239,17 @@ namespace CamLinkPro.UI.Screens
         {
             _manualEntryError.text = message;
             _manualEntryError.style.display = DisplayStyle.Flex;
+        }
+
+        /// Unlike Re-pair (SetPaired(null) alone, which just drops back to
+        /// the Unpaired screen while leaving the saved values in place so
+        /// "Enter Manually" still offers them), Unpair also wipes the saved
+        /// pairing itself -- for a pairing that's gone stale/wrong and
+        /// shouldn't keep being offered as the default.
+        void OnUnpairClicked()
+        {
+            PairingStore.Clear();
+            SetPaired(null);
         }
 
         void SetPaired(PairingInfo? pairing)

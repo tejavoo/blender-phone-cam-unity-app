@@ -29,7 +29,10 @@
                 <ui:Label name="PairedHeadline" text="Connected" class="text-title" />
             </ui:VisualElement>
             <ui:Label name="PairedSubline" text="pose:5005 video/cmd:5006" class="text-caption" style="margin-top: 6px;" />
-            <ui:Button name="RepairLink" text="Re-pair" class="button-secondary text-body" style="margin-top: 12px;" />
+            <ui:VisualElement style="flex-direction: row; margin-top: 12px;">
+                <ui:Button name="RepairLink" text="Re-pair" class="button-secondary text-body" />
+                <ui:Button name="UnpairLink" text="Unpair" class="button-secondary text-body" style="margin-left: 10px;" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
         <ui:VisualElement name="BottomBar" style="flex-direction: row; justify-content: space-between;">
