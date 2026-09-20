@@ -15,6 +15,8 @@ namespace CamLinkPro.UI.Screens
         VisualElement _manualEntryModal;
         VisualElement _aboutModal;
         Label _manualEntryError;
+        VisualElement _pairedStatusDot;
+        Label _pairedHeadline;
         Label _pairedSubline;
         Button _letsRecordButton;
 
@@ -26,6 +28,16 @@ namespace CamLinkPro.UI.Screens
         IVisualElementScheduledItem _probeTimeoutItem;
         bool _probeResolved;
         const int ProbeTimeoutMs = 4000;
+
+        // Kept alive for as long as Landing shows the Paired card, purely to
+        // know whether "Connected" is still true -- the one-shot probe
+        // channel used to prove a pairing works is disposed the instant it
+        // succeeds, so without this the pill would freeze on "Connected"
+        // forever even after Blender disconnects. Reuses the same
+        // PING/PONG-driven liveness + auto-reconnect VideoCommandChannel
+        // already has, just for status display rather than commands.
+        VideoCommandChannel _liveChannel;
+        IVisualElementScheduledItem _liveTickItem;
 
         IVisualElementScheduledItem _heartTick;
         float _heartStartTime;
@@ -44,6 +56,8 @@ namespace CamLinkPro.UI.Screens
             _manualEntryModal = root.Q("ManualEntryModal");
             _aboutModal = root.Q("AboutModal");
             _manualEntryError = root.Q<Label>("ManualEntryError");
+            _pairedStatusDot = root.Q("PairedStatusDot");
+            _pairedHeadline = root.Q<Label>("PairedHeadline");
             _pairedSubline = root.Q<Label>("PairedSubline");
             _letsRecordButton = root.Q<Button>("LetsRecordButton");
 
@@ -79,6 +93,8 @@ namespace CamLinkPro.UI.Screens
 
             _currentPairing = PairingStore.LoadLastUsed();
             SetPaired(_currentPairing);
+            if (_currentPairing.HasValue)
+                StartLiveMonitor(_currentPairing.Value);
             RefreshWifiWarning();
             ConsumePendingScan();
         }
@@ -121,6 +137,7 @@ namespace CamLinkPro.UI.Screens
         {
             _heartTick?.Pause();
             AbortProbe();
+            StopLiveMonitor();
         }
 
         void OpenModal(PairingInfo? prefill)
@@ -205,10 +222,27 @@ namespace CamLinkPro.UI.Screens
             if (_probeResolved)
                 return;
             _probeResolved = true;
-            AbortProbe();
 
-            CloseModal();
+            // Not AbortProbe(): that disposes _probeChannel, but this exact
+            // already-connected-and-AUTH'd channel is what we want to keep
+            // running as the live monitor, not throw away and reconnect.
+            _probeTickItem?.Pause();
+            _probeTickItem = null;
+            _probeTimeoutItem?.Pause();
+            _probeTimeoutItem = null;
+            _connectButton.SetEnabled(true);
+            _connectButton.text = "Connect";
+            _manualEntryModal.style.display = DisplayStyle.None;
+
             PairingStore.SaveLastUsed(pairing);
+            StartLiveMonitor(pairing, reuse: _probeChannel);
+            _probeChannel = null;
+            // The reused channel's own Connected transition already fired
+            // (and was missed) before OnLiveChannelStateChanged was wired up
+            // above -- force the pill in sync now rather than wait for its
+            // next state change, which may be a while if nothing changes.
+            OnLiveChannelStateChanged(ChannelState.Connected);
+
             SetPaired(pairing);
         }
 
@@ -265,9 +299,62 @@ namespace CamLinkPro.UI.Screens
             _letsRecordButton.EnableInClassList("button-secondary", !isPaired);
 
             if (isPaired)
+            {
                 _pairedSubline.text = $"pose:{pairing.Value.PosePort} video/cmd:{pairing.Value.VideoPort}";
+            }
+            else
+            {
+                // Re-pair/Unpair dropping back to the Unpaired screen, or a
+                // failed re-verify on app start -- either way there's no
+                // "Connected" card left to keep a live status for.
+                StopLiveMonitor();
+            }
 
             RefreshWifiWarning();
+        }
+
+        /// Starts (or takes over) the persistent status channel backing the
+        /// Paired card's "Connected"/"Reconnecting…" pill. Pass an
+        /// already-running channel via `reuse` (the just-succeeded probe) to
+        /// avoid a pointless disconnect/reconnect right after proving the
+        /// pairing works.
+        void StartLiveMonitor(PairingInfo pairing, VideoCommandChannel reuse = null)
+        {
+            StopLiveMonitor();
+
+            _liveChannel = reuse ?? new VideoCommandChannel(pairing.Ip, pairing.VideoPort, pairing.Token);
+            _liveChannel.StateChanged += OnLiveChannelStateChanged;
+            _liveTickItem = _root.schedule.Execute(() => _liveChannel?.Pump()).Every(16);
+
+            if (reuse == null)
+                _liveChannel.Start();
+        }
+
+        void StopLiveMonitor()
+        {
+            _liveTickItem?.Pause();
+            _liveTickItem = null;
+
+            if (_liveChannel == null)
+                return;
+            _liveChannel.StateChanged -= OnLiveChannelStateChanged;
+            _liveChannel.Dispose();
+            _liveChannel = null;
+        }
+
+        /// The channel's own state briefly reads Connected right after the
+        /// raw TCP handshake, before AUTH is even evaluated (see the comment
+        /// on StartConnectionProbe) -- so on a reconnect after e.g. a token
+        /// change, this pill can flash green for a moment before the server
+        /// drops it and the channel's own retry loop takes over. Cosmetic
+        /// only: it always settles on the right state within a few seconds,
+        /// same as the retry/PING-timeout logic already backing it.
+        void OnLiveChannelStateChanged(ChannelState state)
+        {
+            var connected = state == ChannelState.Connected;
+            _pairedStatusDot.RemoveFromClassList(connected ? "status-dot--lost" : "status-dot--good");
+            _pairedStatusDot.AddToClassList(connected ? "status-dot--good" : "status-dot--lost");
+            _pairedHeadline.text = connected ? "Connected" : "Reconnecting…";
         }
 
         void RefreshWifiWarning()
